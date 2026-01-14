@@ -13,7 +13,8 @@ const usuarioSchema = new mongoose.Schema({
     placaVehiculo: { type: String },
     placa2Vehiculo: { type: String },
     password: { type: String, required: true },
-    rol: { type: String, enum: ["admin", "residente", "porteria"], default: "residente" }
+    rol: { type: String, enum: ["admin", "residente", "porteria"], default: "residente" },
+    fotoPerfil: { type: String, default: null }
 }, {
     timestamps: true
 });
