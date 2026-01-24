@@ -125,6 +125,32 @@ npm run prod        # Producción (NODE_ENV=production)
 npm run generate-secret  # Generar JWT_SECRET seguro
 ```
 
+## 🐳 Docker
+
+### Desarrollo rápido con Docker Compose
+```bash
+# Inicia la app + MongoDB
+docker-compose up -d
+
+# Ver logs
+docker-compose logs -f app
+
+# Detener
+docker-compose down
+```
+
+### Build manual
+```bash
+# Construir imagen
+docker build -t admin-residencial .
+
+# Ejecutar (requiere MongoDB externo)
+docker run -p 5000:5000 \
+  -e MONGO_URI=mongodb://host.docker.internal:27017/adminResidencial \
+  -e JWT_SECRET=tu_clave_secura \
+  admin-residencial
+```
+
 ## 🤝 Contribuir
 
 1. Fork el proyecto
