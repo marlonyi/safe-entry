@@ -111,6 +111,22 @@ app.use('/api/visitantes', visitanteRoutes);
 app.use('/api/parqueaderos', parqueaderoRoutes);
 
 // ========================================
+// 💓 Health Check (para monitoreo)
+// ========================================
+app.get('/api/health', async (req, res) => {
+    const mongoose = require('mongoose');
+    const dbStatus = mongoose.connection.readyState === 1 ? 'connected' : 'disconnected';
+
+    res.json({
+        status: 'ok',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(process.uptime()),
+        environment: process.env.NODE_ENV || 'development',
+        database: dbStatus
+    });
+});
+
+// ========================================
 // 📌 Rutas de Auditoría y Seguridad
 // ========================================
 const { getRateLimitStatus } = require('./middlewares/rateLimit.middleware');
