@@ -2,7 +2,10 @@ require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const cors = require('cors');
+const helmet = require('helmet'); // 🛡️ Headers de seguridad HTTP
+const compression = require('compression'); // 📦 Compresión gzip de respuestas
 const conectarDB = require('./config/database');
+const logger = require('./config/logger'); // 📝 Sistema de logging
 const usuarioRoutes = require('./routes/usuario.routes');
 const visitanteRoutes = require('./routes/visitante.routes');
 const parqueaderoRoutes = require('./routes/parqueadero.routes');
@@ -16,6 +19,13 @@ const port = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
 // ========================================
+// 🔒 Validación de seguridad al inicio
+// ========================================
+if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'secreto')) {
+    console.error('⚠️ ADVERTENCIA DE SEGURIDAD: JWT_SECRET no está configurado correctamente para producción');
+}
+
+// ========================================
 // 📌 Configuración de CORS
 // ========================================
 const corsOptions = {
@@ -27,15 +37,21 @@ const corsOptions = {
             'http://localhost:5000',
             'http://localhost:3000',
             'http://127.0.0.1:5000',
+            'http://127.0.0.1:3000',
             process.env.FRONTEND_URL_LOCAL,
             process.env.FRONTEND_URL_PROD
         ].filter(Boolean); // Eliminar valores undefined
 
         if (allowedOrigins.includes(origin)) {
             callback(null, true);
+        } else if (isProduction) {
+            // En producción: bloquear orígenes no autorizados
+            console.warn(`🚫 CORS bloqueó origen no autorizado: ${origin}`);
+            callback(new Error('No permitido por CORS'));
         } else {
-            console.warn(`⚠️ CORS bloqueó origen: ${origin}`);
-            callback(null, true); // En desarrollo permitir todo, en prod cambiar a callback(new Error('CORS'))
+            // En desarrollo: permitir pero registrar advertencia
+            console.warn(`⚠️ CORS permitió origen no listado (desarrollo): ${origin}`);
+            callback(null, true);
         }
     },
     credentials: true,
@@ -44,6 +60,18 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// 🛡️ Headers de seguridad HTTP (Helmet)
+// Configuración permisiva para no romper funcionalidad existente
+app.use(helmet({
+    contentSecurityPolicy: false, // Deshabilitado para no romper scripts inline en HTML
+    crossOriginEmbedderPolicy: false, // Permite cargar recursos externos
+    crossOriginResourcePolicy: { policy: "cross-origin" } // Permite recursos cross-origin
+}));
+
+// 📦 Compresión gzip de respuestas (mejora rendimiento)
+app.use(compression());
+
 app.use(express.json({ limit: '5mb' }));  // Aumentado para permitir fotos de perfil en base64
 app.use(express.urlencoded({ limit: '5mb', extended: true }));
 
@@ -68,10 +96,10 @@ app.get('/api/config', (req, res) => {
 (async () => {
     try {
         await conectarDB();
-        console.log("✅ Conectado a MongoDB");
+        logger.info('✅ Conectado a MongoDB');
         await crearAdminSiNoExiste();
     } catch (err) {
-        console.error("❌ Error conectando a MongoDB:", err);
+        logger.error('❌ Error conectando a MongoDB:', { error: err.message });
     }
 })();
 
@@ -212,7 +240,7 @@ async function crearAdminSiNoExiste() {
 // 📌 Manejo de errores global
 // ========================================
 app.use((err, req, res, next) => {
-    console.error('❌ Error no manejado:', err.stack);
+    logger.error('❌ Error no manejado:', { error: err.message, stack: err.stack });
     res.status(500).json({
         error: 'Error interno del servidor',
         mensaje: process.env.NODE_ENV === 'development' ? err.message : 'Algo salió mal'
@@ -223,7 +251,7 @@ app.use((err, req, res, next) => {
 // 🚀 Iniciar servidor
 // ========================================
 app.listen(port, () => {
-    console.log(`🚀 Servidor corriendo en http://localhost:${port}`);
-    console.log(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
-    console.log(`🔗 API URL: http://localhost:${port}/api`);
+    logger.info(`🚀 Servidor corriendo en http://localhost:${port}`);
+    logger.info(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`🔗 API URL: http://localhost:${port}/api`);
 });

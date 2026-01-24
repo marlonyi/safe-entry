@@ -19,4 +19,9 @@ const usuarioSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Índices para mejorar rendimiento de queries comunes
+usuarioSchema.index({ rol: 1, createdAt: -1 }); // Para listar usuarios por rol
+usuarioSchema.index({ placaVehiculo: 1 }); // Para búsqueda por placa
+usuarioSchema.index({ torre: 1, apartamento: 1 }); // Para búsqueda por ubicación
+
 module.exports = mongoose.model("Usuario", usuarioSchema);

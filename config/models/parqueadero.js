@@ -14,4 +14,7 @@ const parqueaderoSchema = new mongoose.Schema({
   timestamps: true
 });
 
+// Índice para búsqueda rápida por estado
+parqueaderoSchema.index({ estado: 1 });
+
 module.exports = mongoose.model("Parqueadero", parqueaderoSchema, "parqueaderos");

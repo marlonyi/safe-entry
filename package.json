@@ -1,24 +1,35 @@
 {
   "name": "admin-residencial",
-  "version": "1.0.0",
+  "version": "1.1.0",
+  "description": "Sistema de administración residencial con control de acceso vehicular",
   "main": "server.js",
   "scripts": {
+    "start": "node server.js",
+    "dev": "set NODE_ENV=development && node server.js",
+    "prod": "set NODE_ENV=production && node server.js",
     "test": "echo \"No tests specified\"",
-    "start": "node server.js"
+    "generate-secret": "node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(64).toString('hex'))\""
   },
-  "keywords": [],
+  "keywords": [
+    "residencial",
+    "admin",
+    "parqueadero",
+    "visitantes"
+  ],
   "author": "",
   "license": "ISC",
-  "description": "",
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "body-parser": "^1.20.3",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^7.6.3",
     "mysql2": "^3.15.3",
-    "node-fetch": "^3.3.2"
+    "node-fetch": "^3.3.2",
+    "winston": "^3.19.0"
   }
 }
