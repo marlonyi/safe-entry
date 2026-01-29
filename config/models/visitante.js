@@ -3,10 +3,18 @@ const Parqueadero = require('./parqueadero'); // 🔹 Asegúrate de la ruta corr
 const crypto = require('crypto');
 
 const visitanteSchema = new mongoose.Schema({
+  // ========== REFERENCIA AL CONJUNTO (TENANT) ==========
+  conjunto: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Conjunto",
+    required: true  // Todos los visitantes deben pertenecer a un conjunto
+  },
+
+  // ========== INFORMACIÓN DEL VISITANTE ==========
   nombre: { type: String, required: true },
   apellido: { type: String, required: true },
-  cedula: { type: String, required: true, unique: true },
-  placaVehiculo: { type: String, required: true, unique: true },
+  cedula: { type: String, required: true },
+  placaVehiculo: { type: String, required: true },
   residenteId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Usuario",
@@ -52,6 +60,15 @@ const visitanteSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+// ========== ÍNDICES PARA MULTI-TENANT ==========
+// Cédula y placa únicas por conjunto
+visitanteSchema.index({ conjunto: 1, cedula: 1 }, { unique: true });
+visitanteSchema.index({ conjunto: 1, placaVehiculo: 1 }, { unique: true });
+
+// Índices para queries eficientes dentro de un conjunto
+visitanteSchema.index({ conjunto: 1, residenteId: 1, createdAt: -1 }); // Visitantes por residente
+visitanteSchema.index({ conjunto: 1, estado: 1 }); // Filtrar por estado
 
 // Método para generar token QR
 visitanteSchema.methods.generarQR = function (horasValidez = 24) {

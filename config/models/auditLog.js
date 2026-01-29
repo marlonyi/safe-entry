@@ -5,6 +5,13 @@ const mongoose = require('mongoose');
  * Registra acciones importantes en el sistema
  */
 const auditLogSchema = new mongoose.Schema({
+    // ========== REFERENCIA AL CONJUNTO (TENANT) ==========
+    conjunto: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Conjunto",
+        default: null  // null = acción de superadmin (nivel global)
+    },
+
     // Usuario que realizó la acción
     usuario: {
         id: { type: mongoose.Schema.Types.ObjectId, ref: 'Usuario' },
@@ -30,6 +37,10 @@ const auditLogSchema = new mongoose.Schema({
             'RESET_PASSWORD',
             'ACCESS_DENIED',
             'RATE_LIMIT_EXCEEDED',
+            // Nuevas acciones para multi-tenant
+            'CREATE_CONJUNTO',
+            'UPDATE_CONJUNTO',
+            'DELETE_CONJUNTO',
             'OTHER'
         ],
         required: true
@@ -43,7 +54,7 @@ const auditLogSchema = new mongoose.Schema({
 
     // Detalles del recurso afectado
     recurso: {
-        tipo: String, // 'usuario', 'visitante', 'parqueadero', etc.
+        tipo: String, // 'usuario', 'visitante', 'parqueadero', 'conjunto', etc.
         id: String,
         nombre: String, // Nombre del recurso afectado para fácil visualización
         datosAnteriores: mongoose.Schema.Types.Mixed, // Estado ANTES del cambio
@@ -74,12 +85,12 @@ const auditLogSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Índices para búsquedas eficientes
-auditLogSchema.index({ fecha: -1 });
-auditLogSchema.index({ 'usuario.cedula': 1, fecha: -1 });
-auditLogSchema.index({ 'usuario.rol': 1, fecha: -1 });
-auditLogSchema.index({ accion: 1, fecha: -1 });
-auditLogSchema.index({ 'requestInfo.ip': 1, fecha: -1 });
+// ========== ÍNDICES PARA MULTI-TENANT ==========
+auditLogSchema.index({ conjunto: 1, fecha: -1 });
+auditLogSchema.index({ conjunto: 1, 'usuario.cedula': 1, fecha: -1 });
+auditLogSchema.index({ conjunto: 1, 'usuario.rol': 1, fecha: -1 });
+auditLogSchema.index({ conjunto: 1, accion: 1, fecha: -1 });
+auditLogSchema.index({ 'requestInfo.ip': 1, fecha: -1 }); // Este se mantiene global para seguridad
 
 // Método estático para crear log
 auditLogSchema.statics.registrar = async function (datos) {

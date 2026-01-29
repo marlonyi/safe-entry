@@ -157,32 +157,39 @@ exports.crearUsuario = async (req, res) => {
 // Login de usuario
 exports.loginUsuario = async (req, res) => {
     try {
-        const { cedula, password } = req.body;
+        const { cedula, password, conjuntoId } = req.body; // conjuntoId opcional para casos de múltiples matches
         const { audit } = require('../middlewares/audit.middleware');
         const { recordFailedLogin, resetLoginAttempts } = require('../middlewares/rateLimit.middleware');
 
-        // Helper para generar tokens
+        // Helper para generar tokens (ahora incluye conjuntoId)
         const generateTokens = (payload) => {
             const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "2h" });
             const refreshToken = jwt.sign({ ...payload, type: 'refresh' }, JWT_SECRET, { expiresIn: "7d" });
             return { accessToken, refreshToken };
         };
 
-        // Login de admin hardcoded
-        if (cedula === ADMIN_CEDULA && password === ADMIN_PASSWORD) {
-            const { accessToken, refreshToken } = generateTokens({ id: "admin", rol: "admin" });
-            resetLoginAttempts(req);
-            await audit.loginSuccess(req, ADMIN_INFO);
-            return res.json({
-                token: accessToken,
-                refreshToken,
-                expiresIn: 7200, // 2 horas en segundos
-                usuario: ADMIN_INFO
-            });
-        }
+        // ========== BUSCAR USUARIO(S) POR CÉDULA ==========
+        // Puede haber múltiples usuarios con la misma cédula en diferentes conjuntos
+        const usuarios = await Usuario.find({ cedula }).populate('conjunto', 'nombre estado');
 
-        const usuario = await Usuario.findOne({ cedula });
-        if (!usuario) {
+        if (usuarios.length === 0) {
+            // También verificar login de admin hardcoded (legacy)
+            if (cedula === ADMIN_CEDULA && password === ADMIN_PASSWORD) {
+                const { accessToken, refreshToken } = generateTokens({
+                    id: "admin",
+                    rol: "superadmin",
+                    conjuntoId: null // SuperAdmin no tiene conjunto
+                });
+                resetLoginAttempts(req);
+                await audit.loginSuccess(req, { ...ADMIN_INFO, rol: 'superadmin' });
+                return res.json({
+                    token: accessToken,
+                    refreshToken,
+                    expiresIn: 7200,
+                    usuario: { ...ADMIN_INFO, rol: 'superadmin' }
+                });
+            }
+
             const result = recordFailedLogin(req);
             await audit.loginFailed(req, cedula, 'Usuario no encontrado');
             return res.status(400).json({
@@ -191,6 +198,46 @@ exports.loginUsuario = async (req, res) => {
             });
         }
 
+        // ========== MANEJO DE MÚLTIPLES CONJUNTOS ==========
+        // Si hay múltiples usuarios con la misma cédula en diferentes conjuntos
+        if (usuarios.length > 1 && !conjuntoId) {
+            // Si no se especificó conjunto, devolver lista para que el usuario elija
+            const conjuntosDisponibles = usuarios
+                .filter(u => u.conjunto && u.conjunto.estado === 'activo')
+                .map(u => ({
+                    conjuntoId: u.conjunto._id,
+                    conjuntoNombre: u.conjunto.nombre
+                }));
+
+            if (conjuntosDisponibles.length === 0) {
+                return res.status(400).json({
+                    error: "No hay conjuntos activos para este usuario"
+                });
+            }
+
+            return res.status(300).json({
+                mensaje: "Seleccione el conjunto al que desea ingresar",
+                conjuntos: conjuntosDisponibles,
+                requiereSeleccion: true
+            });
+        }
+
+        // Seleccionar el usuario correcto
+        let usuario;
+        if (conjuntoId) {
+            // Si se especificó conjunto, buscar ese específicamente
+            usuario = usuarios.find(u =>
+                u.conjunto && u.conjunto._id.toString() === conjuntoId
+            );
+            if (!usuario) {
+                return res.status(400).json({ error: "Usuario no encontrado en ese conjunto" });
+            }
+        } else {
+            // Un solo usuario encontrado o es superadmin
+            usuario = usuarios[0];
+        }
+
+        // ========== VERIFICAR CONTRASEÑA ==========
         const esValida = await bcrypt.compare(password, usuario.password);
         if (!esValida) {
             const result = recordFailedLogin(req);
@@ -201,12 +248,22 @@ exports.loginUsuario = async (req, res) => {
             });
         }
 
-        // Login exitoso
+        // ========== VERIFICAR ESTADO DEL CONJUNTO (si aplica) ==========
+        if (usuario.rol !== 'superadmin' && usuario.conjunto) {
+            if (usuario.conjunto.estado !== 'activo') {
+                return res.status(403).json({
+                    error: "El conjunto residencial está suspendido o inactivo. Contacte al administrador."
+                });
+            }
+        }
+
+        // ========== LOGIN EXITOSO ==========
         resetLoginAttempts(req);
 
         const payload = {
             id: usuario.id,
-            rol: usuario.rol || "residente"
+            rol: usuario.rol || "residente",
+            conjuntoId: usuario.conjunto ? usuario.conjunto._id : null // SuperAdmin tiene null
         };
         const { accessToken, refreshToken } = generateTokens(payload);
 
@@ -219,7 +276,7 @@ exports.loginUsuario = async (req, res) => {
         res.json({
             token: accessToken,
             refreshToken,
-            expiresIn: 7200, // 2 horas en segundos
+            expiresIn: 7200,
             usuario: {
                 id: usuario.id,
                 nombre: usuario.nombre,
@@ -229,7 +286,10 @@ exports.loginUsuario = async (req, res) => {
                 placa: usuario.placaVehiculo || null,
                 apartamento: usuario.apartamento || null,
                 torre: usuario.torre || null,
-                fotoPerfil: usuario.fotoPerfil || null
+                fotoPerfil: usuario.fotoPerfil || null,
+                // Datos del conjunto (si aplica)
+                conjuntoId: usuario.conjunto?._id || null,
+                conjuntoNombre: usuario.conjunto?.nombre || null
             }
         });
     } catch (error) {
@@ -331,16 +391,24 @@ exports.obtenerUsuarios = async (req, res) => {
 
         const residentes = usuarios.filter(u => u.rol === 'residente');
         const porteros = usuarios.filter(u => u.rol === 'porteria');
+        const admins = usuarios.filter(u => u.rol === 'admin');
+        const superadmins = usuarios.filter(u => u.rol === 'superadmin');
 
         res.json({
             success: true,
+            // Para compatibilidad con vistas existentes
             residentes,
             visitantes,
             porteros,
+            admins,
+            // Para SuperAdmin: lista completa de usuarios
+            data: usuarios,
             _meta: {
                 totalResidentes: residentes.length,
                 totalVisitantes: visitantes.length,
                 totalPorteros: porteros.length,
+                totalAdmins: admins.length,
+                totalSuperAdmins: superadmins.length,
                 totalUsuarios,
                 totalVisitantesDB: totalVisitantes,
                 page,
@@ -636,5 +704,408 @@ exports.actualizarFotoPerfil = async (req, res) => {
             error: "Error al actualizar la foto de perfil",
             detalles: error.message
         });
+    }
+};
+
+// 🏢 SUPERADMIN: Cambiar rol de un usuario
+exports.cambiarRol = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nuevoRol } = req.body;
+
+        // Validar roles permitidos
+        const rolesPermitidos = ['admin', 'porteria', 'residente'];
+        if (!rolesPermitidos.includes(nuevoRol)) {
+            return res.status(400).json({
+                error: `Rol no válido. Use: ${rolesPermitidos.join(', ')}`
+            });
+        }
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "ID de usuario no válido" });
+        }
+
+        const usuario = await Usuario.findById(id);
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // No permitir cambiar rol de superadmin
+        if (usuario.rol === 'superadmin') {
+            return res.status(403).json({ error: "No se puede modificar el rol de un SuperAdmin" });
+        }
+
+        const rolAnterior = usuario.rol;
+        usuario.rol = nuevoRol;
+        await usuario.save();
+
+        // Registrar en auditoría
+        try {
+            await AuditLog.registrar({
+                accion: 'CAMBIO_ROL',
+                entidad: 'Usuario',
+                entidadId: usuario._id,
+                descripcion: `Rol cambiado de ${rolAnterior} a ${nuevoRol}`,
+                datosAnteriores: { rol: rolAnterior },
+                datosNuevos: { rol: nuevoRol },
+                ejecutadoPor: req.usuario ? { id: req.usuario.id, cedula: req.usuario.cedula } : null,
+                ip: req.ip
+            });
+        } catch (e) {
+            console.warn('No se pudo registrar auditoría:', e.message);
+        }
+
+        res.json({
+            mensaje: `Rol actualizado de ${rolAnterior} a ${nuevoRol}`,
+            usuario: {
+                id: usuario._id,
+                nombre: usuario.nombre,
+                apellido: usuario.apellido,
+                cedula: usuario.cedula,
+                rol: usuario.rol
+            }
+        });
+    } catch (error) {
+        console.error("Error al cambiar rol:", error);
+        res.status(500).json({ error: "Error al cambiar rol", detalles: error.message });
+    }
+};
+
+// 🏢 SUPERADMIN: Mover usuario a otro conjunto
+exports.moverAConjunto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { conjuntoId } = req.body;
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "ID de usuario no válido" });
+        }
+        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
+            return res.status(400).json({ error: "ID de conjunto no válido" });
+        }
+
+        const Conjunto = require('../config/models/conjunto');
+        const conjunto = await Conjunto.findById(conjuntoId);
+        if (!conjunto) {
+            return res.status(404).json({ error: "Conjunto no encontrado" });
+        }
+
+        const usuario = await Usuario.findById(id);
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        if (usuario.rol === 'superadmin') {
+            return res.status(403).json({ error: "No se puede mover a un SuperAdmin" });
+        }
+
+        const conjuntoAnterior = usuario.conjunto;
+        usuario.conjunto = conjuntoId;
+        await usuario.save();
+
+        res.json({
+            mensaje: `Usuario movido a ${conjunto.nombre}`,
+            usuario: {
+                id: usuario._id,
+                nombre: usuario.nombre,
+                conjunto: conjunto.nombre
+            }
+        });
+    } catch (error) {
+        console.error("Error al mover usuario:", error);
+        res.status(500).json({ error: "Error al mover usuario", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 CREAR ADMIN RÁPIDO (SuperAdmin only)
+// ========================================
+exports.crearAdminRapido = async (req, res) => {
+    try {
+        const { conjuntoId, nombre, apellido, cedula, email } = req.body;
+        const Conjunto = require("../config/models/conjunto");
+
+        // Validar que el conjunto existe
+        const conjunto = await Conjunto.findById(conjuntoId);
+        if (!conjunto) {
+            return res.status(404).json({ error: "Conjunto no encontrado" });
+        }
+
+        // Validar campos requeridos
+        if (!nombre || !apellido || !cedula) {
+            return res.status(400).json({ error: "Nombre, apellido y cédula son requeridos" });
+        }
+
+        // Verificar si ya existe un usuario con esa cédula en ese conjunto
+        const existente = await Usuario.findOne({ cedula, conjunto: conjuntoId });
+        if (existente) {
+            return res.status(400).json({ error: "Ya existe un usuario con esa cédula en este conjunto" });
+        }
+
+        // Generar contraseña temporal (8 caracteres alfanuméricos)
+        const generarPassword = () => {
+            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+            let password = '';
+            for (let i = 0; i < 8; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return password;
+        };
+
+        const passwordTemporal = generarPassword();
+        const hashedPassword = await bcrypt.hash(passwordTemporal, 10);
+
+        // Crear el admin
+        const nuevoAdmin = new Usuario({
+            nombre: nombre.trim(),
+            apellido: apellido.trim(),
+            cedula: cedula.trim(),
+            email: email?.trim() || null,
+            password: hashedPassword,
+            rol: 'admin',
+            conjunto: conjuntoId
+        });
+
+        await nuevoAdmin.save();
+
+        // Registrar en audit log
+        try {
+            await AuditLog.registrar({
+                usuario: {
+                    id: req.usuario.id,
+                    cedula: 'superadmin',
+                    nombre: 'SuperAdmin',
+                    rol: 'superadmin'
+                },
+                accion: 'CREAR_ADMIN_RAPIDO',
+                entidad: {
+                    tipo: 'usuario',
+                    id: nuevoAdmin._id.toString(),
+                    nombre: `${nombre} ${apellido}`
+                },
+                resultado: 'SUCCESS'
+            });
+        } catch (auditError) {
+            console.warn('Error registrando auditoría:', auditError.message);
+        }
+
+        res.status(201).json({
+            mensaje: "Administrador creado exitosamente",
+            admin: {
+                id: nuevoAdmin._id,
+                nombre: nuevoAdmin.nombre,
+                apellido: nuevoAdmin.apellido,
+                cedula: nuevoAdmin.cedula,
+                email: nuevoAdmin.email,
+                conjunto: conjunto.nombre
+            },
+            credenciales: {
+                cedula: nuevoAdmin.cedula,
+                passwordTemporal: passwordTemporal,
+                advertencia: "Guarde esta contraseña, no se mostrará de nuevo"
+            }
+        });
+    } catch (error) {
+        console.error("Error al crear admin rápido:", error);
+        res.status(500).json({ error: "Error al crear administrador", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 EXPORTAR DATOS DE CONJUNTO (SuperAdmin only)
+// ========================================
+exports.exportarDatosConjunto = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { formato = 'json' } = req.query;
+
+        const Conjunto = require("../config/models/conjunto");
+        const Visitante = require("../config/models/visitante");
+        const Parqueadero = require("../config/models/parqueadero");
+
+        // Verificar que el conjunto existe
+        const conjunto = await Conjunto.findById(id);
+        if (!conjunto) {
+            return res.status(404).json({ error: "Conjunto no encontrado" });
+        }
+
+        // Obtener todos los datos del conjunto
+        const [usuarios, visitantes, parqueaderos] = await Promise.all([
+            Usuario.find({ conjunto: id }).select('-password -__v').lean(),
+            Visitante.find({ conjunto: id }).select('-__v').lean(),
+            Parqueadero.find({ conjunto: id }).select('-__v').lean()
+        ]);
+
+        const datos = {
+            conjunto: {
+                nombre: conjunto.nombre,
+                nit: conjunto.nit,
+                direccion: conjunto.direccion,
+                ciudad: conjunto.ciudad,
+                estado: conjunto.estado,
+                plan: conjunto.plan,
+                exportadoEn: new Date().toISOString()
+            },
+            estadisticas: {
+                totalUsuarios: usuarios.length,
+                totalVisitantes: visitantes.length,
+                totalParqueaderos: parqueaderos.length,
+                usuariosPorRol: {
+                    admins: usuarios.filter(u => u.rol === 'admin').length,
+                    residentes: usuarios.filter(u => u.rol === 'residente').length,
+                    porteros: usuarios.filter(u => u.rol === 'porteria').length
+                }
+            },
+            usuarios,
+            visitantes,
+            parqueaderos
+        };
+
+        if (formato === 'csv') {
+            // Generar CSV básico de usuarios
+            let csv = 'Tipo,Nombre,Apellido,Cedula,Rol,Apartamento,Torre,Placa\n';
+            usuarios.forEach(u => {
+                csv += `Usuario,"${u.nombre}","${u.apellido}","${u.cedula}","${u.rol}","${u.apartamento || ''}","${u.torre || ''}","${u.placaVehiculo || ''}"\n`;
+            });
+            visitantes.forEach(v => {
+                csv += `Visitante,"${v.nombre}","${v.apellido}","${v.cedula}","visitante","${v.apartamentoDestino || ''}","${v.torreDestino || ''}","${v.placaVehiculo || ''}"\n`;
+            });
+
+            res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="${conjunto.nombre.replace(/\s+/g, '_')}_export.csv"`);
+            return res.send('\ufeff' + csv); // BOM para Excel
+        }
+
+        // Formato JSON por defecto
+        res.json(datos);
+    } catch (error) {
+        console.error("Error al exportar datos:", error);
+        res.status(500).json({ error: "Error al exportar datos", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 GENERAR QR DE ACCESO PARA RESIDENTE
+// GET /api/usuarios/:id/qr-acceso
+// ========================================
+exports.generarQRAcceso = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        // Verificar que el usuario solicita su propio QR o es admin
+        if (req.usuario.id !== id && req.usuario.rol !== 'admin' && req.usuario.rol !== 'superadmin') {
+            return res.status(403).json({ error: "No tienes permiso para generar este QR" });
+        }
+
+        const usuario = await Usuario.findById(id);
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Si ya tiene QR, devolverlo; si no, generar uno nuevo
+        if (!usuario.qrAcceso?.token) {
+            usuario.generarQRAcceso();
+            await usuario.save();
+        }
+
+        // Generar URL para el QR
+        const baseUrl = process.env.FRONTEND_URL_PROD || `http://localhost:${process.env.PORT || 5000}`;
+        const qrUrl = `${baseUrl}/api/usuarios/verificar-qr/${usuario.qrAcceso.token}`;
+
+        res.json({
+            success: true,
+            qr: {
+                token: usuario.qrAcceso.token,
+                url: qrUrl,
+                fechaGeneracion: usuario.qrAcceso.fechaGeneracion,
+                usuario: {
+                    nombre: `${usuario.nombre} ${usuario.apellido}`,
+                    cedula: usuario.cedula,
+                    apartamento: usuario.apartamento,
+                    torre: usuario.torre
+                }
+            }
+        });
+    } catch (error) {
+        console.error("Error al generar QR:", error);
+        res.status(500).json({ error: "Error al generar QR", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 REGENERAR QR DE ACCESO (nuevo token)
+// POST /api/usuarios/:id/qr-acceso/regenerar
+// ========================================
+exports.regenerarQRAcceso = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        if (req.usuario.id !== id && req.usuario.rol !== 'admin' && req.usuario.rol !== 'superadmin') {
+            return res.status(403).json({ error: "No tienes permiso para regenerar este QR" });
+        }
+
+        const usuario = await Usuario.findById(id);
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Generar nuevo token (invalida el anterior)
+        usuario.generarQRAcceso();
+        await usuario.save();
+
+        const baseUrl = process.env.FRONTEND_URL_PROD || `http://localhost:${process.env.PORT || 5000}`;
+        const qrUrl = `${baseUrl}/api/usuarios/verificar-qr/${usuario.qrAcceso.token}`;
+
+        res.json({
+            success: true,
+            mensaje: "QR regenerado exitosamente",
+            qr: {
+                token: usuario.qrAcceso.token,
+                url: qrUrl,
+                fechaGeneracion: usuario.qrAcceso.fechaGeneracion
+            }
+        });
+    } catch (error) {
+        console.error("Error al regenerar QR:", error);
+        res.status(500).json({ error: "Error al regenerar QR", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 VERIFICAR QR DE ACCESO (para portería)
+// GET /api/usuarios/verificar-qr/:token
+// ========================================
+exports.verificarQRAcceso = async (req, res) => {
+    try {
+        const { token } = req.params;
+
+        const usuario = await Usuario.buscarPorQR(token);
+        if (!usuario) {
+            return res.status(404).json({
+                valid: false,
+                error: "Código QR inválido o no registrado"
+            });
+        }
+
+        res.json({
+            valid: true,
+            mensaje: "Residente autorizado",
+            residente: {
+                id: usuario._id,
+                nombre: usuario.nombre,
+                apellido: usuario.apellido,
+                cedula: usuario.cedula,
+                apartamento: usuario.apartamento,
+                torre: usuario.torre,
+                placa: usuario.placaVehiculo,
+                conjunto: usuario.conjunto?.nombre || 'Sin asignar',
+                fechaQR: usuario.qrAcceso.fechaGeneracion
+            }
+        });
+    } catch (error) {
+        console.error("Error al verificar QR:", error);
+        res.status(500).json({ valid: false, error: "Error al verificar QR" });
     }
 };

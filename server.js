@@ -9,6 +9,8 @@ const logger = require('./config/logger'); // 📝 Sistema de logging
 const usuarioRoutes = require('./routes/usuario.routes');
 const visitanteRoutes = require('./routes/visitante.routes');
 const parqueaderoRoutes = require('./routes/parqueadero.routes');
+const conjuntoRoutes = require('./routes/conjunto.routes'); // 🏢 Multi-tenant
+const Conjunto = require('./config/models/conjunto'); // 🏢 Modelo de conjuntos
 const Usuario = require('./config/models/usuario');
 const bcrypt = require('bcryptjs');
 const { rateLimiter } = require('./middlewares/rateLimit.middleware');
@@ -109,6 +111,7 @@ app.get('/api/config', (req, res) => {
 app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/visitantes', visitanteRoutes);
 app.use('/api/parqueaderos', parqueaderoRoutes);
+app.use('/api/conjuntos', conjuntoRoutes); // 🏢 Rutas de gestión de conjuntos (multi-tenant)
 
 // ========================================
 // 💓 Health Check (para monitoreo)
@@ -131,6 +134,25 @@ app.get('/api/health', async (req, res) => {
 // ========================================
 const { getRateLimitStatus } = require('./middlewares/rateLimit.middleware');
 const { verificarToken, esAdmin } = require('./middlewares/auth.middleware');
+const cache = require('./config/cache');
+
+// Obtener estadísticas del cache (solo admin)
+app.get('/api/cache/stats', verificarToken, esAdmin, (req, res) => {
+    res.json({
+        cache: cache.getStats(),
+        timestamp: new Date().toISOString()
+    });
+});
+
+// Limpiar cache (solo admin)
+app.post('/api/cache/clear', verificarToken, esAdmin, (req, res) => {
+    cache.clear();
+    logger.info('🧹 Cache limpiado manualmente por admin');
+    res.json({
+        success: true,
+        message: 'Cache limpiado correctamente'
+    });
+});
 
 // Obtener logs de auditoría (solo admin)
 app.get('/api/audit/logs', verificarToken, esAdmin, async (req, res) => {
@@ -221,34 +243,60 @@ app.get('/porteriaactualizar', (req, res) => res.sendFile(path.join(__dirname, '
 app.get('/porteriaregistrar', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaporteriaregistrar.html')));
 app.get('/mapa', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'mapa.html')));
 app.get('/hola', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'holamundo.html')));
+// 🏢 Vista SuperAdmin (multi-tenant)
+app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'VistaSuperadmin.html')));
 
 // ========================================
 // 📌 Crear usuario admin si no existe
 // ========================================
 async function crearAdminSiNoExiste() {
     try {
-        const adminCedula = process.env.ADMIN_CEDULA || "123456789";
-        const adminPassword = process.env.ADMIN_PASSWORD || "admin123";
+        const superadminCedula = process.env.SUPERADMIN_CEDULA || process.env.ADMIN_CEDULA || "123456789";
+        const superadminPassword = process.env.SUPERADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "admin123";
 
-        const adminExistente = await Usuario.findOne({ cedula: adminCedula });
-        if (!adminExistente) {
-            const hashedPassword = await bcrypt.hash(adminPassword, 10);
-            const nuevoAdmin = new Usuario({
-                nombre: "Admin",
-                apellido: "Principal",
-                cedula: adminCedula,
-                apartamento: "N/A",
-                torre: "N/A",
-                password: hashedPassword,
-                rol: "admin"
+        // 1. Verificar/crear conjunto por defecto para migración
+        let conjuntoPorDefecto = await Conjunto.findOne({ nombre: "Conjunto Principal" });
+        if (!conjuntoPorDefecto) {
+            conjuntoPorDefecto = new Conjunto({
+                nombre: "Conjunto Principal",
+                direccion: "Por configurar",
+                ciudad: "Por configurar",
+                estado: "activo"
             });
-            await nuevoAdmin.save();
-            console.log("✅ Usuario administrador creado con éxito");
+            await conjuntoPorDefecto.save();
+            console.log("🏢 Conjunto Principal creado para migración");
+        }
+
+        // 2. Verificar/crear superadmin
+        const superadminExistente = await Usuario.findOne({ cedula: superadminCedula, rol: 'superadmin' });
+        if (!superadminExistente) {
+            // Verificar si existe como admin normal y actualizarlo
+            const adminExistente = await Usuario.findOne({ cedula: superadminCedula });
+            if (adminExistente) {
+                adminExistente.rol = 'superadmin';
+                adminExistente.conjunto = null; // SuperAdmin no pertenece a ningún conjunto
+                await adminExistente.save();
+                console.log("🔄 Admin existente actualizado a SuperAdmin");
+            } else {
+                const hashedPassword = await bcrypt.hash(superadminPassword, 10);
+                const nuevoSuperAdmin = new Usuario({
+                    nombre: "Super",
+                    apellido: "Administrador",
+                    cedula: superadminCedula,
+                    apartamento: "N/A",
+                    torre: "N/A",
+                    password: hashedPassword,
+                    rol: "superadmin",
+                    conjunto: null // SuperAdmin no pertenece a ningún conjunto
+                });
+                await nuevoSuperAdmin.save();
+                console.log("✅ SuperAdmin creado con éxito");
+            }
         } else {
-            console.log("👤 Usuario administrador ya existe");
+            console.log("👤 SuperAdmin ya existe");
         }
     } catch (error) {
-        console.error("❌ Error al crear el usuario administrador:", error);
+        console.error("❌ Error al crear SuperAdmin/Conjunto:", error);
     }
 }
 

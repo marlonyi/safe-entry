@@ -2,6 +2,14 @@
 const mongoose = require("mongoose");
 
 const historialAccesoSchema = new mongoose.Schema({
+    // ========== REFERENCIA AL CONJUNTO (TENANT) ==========
+    conjunto: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Conjunto",
+        required: true  // Todos los accesos deben pertenecer a un conjunto
+    },
+
+    // ========== INFORMACIÓN DEL ACCESO ==========
     placa: {
         type: String,
         required: true,
@@ -33,9 +41,9 @@ const historialAccesoSchema = new mongoose.Schema({
     timestamps: true
 });
 
-// Índices para búsquedas eficientes
-historialAccesoSchema.index({ fechaHora: -1 });
-historialAccesoSchema.index({ placa: 1 });
-historialAccesoSchema.index({ tipoAcceso: 1 });
+// ========== ÍNDICES PARA MULTI-TENANT ==========
+historialAccesoSchema.index({ conjunto: 1, fechaHora: -1 });
+historialAccesoSchema.index({ conjunto: 1, placa: 1 });
+historialAccesoSchema.index({ conjunto: 1, tipoAcceso: 1 });
 
 module.exports = mongoose.model("HistorialAcceso", historialAccesoSchema, "historialAccesos");

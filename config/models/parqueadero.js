@@ -2,7 +2,15 @@
 const mongoose = require("mongoose");
 
 const parqueaderoSchema = new mongoose.Schema({
-  numero: { type: String, required: true, unique: true },
+  // ========== REFERENCIA AL CONJUNTO (TENANT) ==========
+  conjunto: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Conjunto",
+    required: true  // Todos los parqueaderos deben pertenecer a un conjunto
+  },
+
+  // ========== INFORMACIÓN DEL PARQUEADERO ==========
+  numero: { type: String, required: true },
   estado: {
     type: String,
     enum: ["DISPONIBLE", "EN_ESPERA", "OCUPADO"],
@@ -14,7 +22,11 @@ const parqueaderoSchema = new mongoose.Schema({
   timestamps: true
 });
 
-// Índice para búsqueda rápida por estado
-parqueaderoSchema.index({ estado: 1 });
+// ========== ÍNDICES PARA MULTI-TENANT ==========
+// Número de plaza único por conjunto
+parqueaderoSchema.index({ conjunto: 1, numero: 1 }, { unique: true });
+
+// Índices para queries eficientes dentro de un conjunto
+parqueaderoSchema.index({ conjunto: 1, estado: 1 });
 
 module.exports = mongoose.model("Parqueadero", parqueaderoSchema, "parqueaderos");

@@ -1,13 +1,24 @@
+/**
+ * 🚗 Controlador de Visitantes
+ * 🏢 MULTI-TENANT: Todas las operaciones filtran por conjunto
+ */
+
 const Visitante = require('../config/models/visitante');
 const Parqueadero = require('../config/models/parqueadero');
 const AuditLog = require('../config/models/auditLog');
+const { getTenantFilter, getConjuntoId } = require('../middlewares/auth.middleware');
 
 /**
  * Registrar visitante con asignación automática de plaza
+ * 🏢 Se asigna al conjunto del usuario autenticado
  */
 exports.registrarVisitante = async (req, res) => {
     try {
         let { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante, residenteId, ejecutadoPor } = req.body;
+
+        // Obtener conjunto del usuario autenticado
+        const conjuntoId = getConjuntoId(req);
+        const tenantFilter = getTenantFilter(req);
 
         // Validación básica
         if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante || !placaVisitante) {
@@ -21,8 +32,8 @@ exports.registrarVisitante = async (req, res) => {
             residenteId = null;
         }
 
-        // Buscar plaza disponible
-        const plaza = await Parqueadero.findOne({ estado: "DISPONIBLE" });
+        // Buscar plaza disponible en el conjunto
+        const plaza = await Parqueadero.findOne({ ...tenantFilter, estado: "DISPONIBLE" });
         if (!plaza) {
             return res.status(400).json({ mensaje: "No hay plazas disponibles" });
         }
@@ -33,7 +44,8 @@ exports.registrarVisitante = async (req, res) => {
             cedula: cedulaVisitante,
             placaVehiculo: placaVisitante,
             residenteId: residenteId || null,
-            parqueadero: plaza._id
+            parqueadero: plaza._id,
+            conjunto: conjuntoId // 🏢 Asignar al conjunto del usuario
         });
 
         await nuevoVisitante.save();
@@ -43,9 +55,10 @@ exports.registrarVisitante = async (req, res) => {
         plaza.visitante = nuevoVisitante._id;
         await plaza.save();
 
-        // Registrar en auditoría
+        // Registrar en auditoría con conjunto
         if (ejecutadoPor) {
             await AuditLog.registrar({
+                conjunto: conjuntoId, // 🏢 Incluir conjunto
                 usuario: {
                     id: ejecutadoPor.id,
                     cedula: ejecutadoPor.cedula,
@@ -94,10 +107,13 @@ exports.registrarVisitante = async (req, res) => {
 
 /**
  * Obtener todos los visitantes
+ * 🏢 Filtrado por conjunto del usuario
  */
 exports.obtenerVisitantes = async (req, res) => {
     try {
-        const visitantes = await Visitante.find()
+        const tenantFilter = getTenantFilter(req);
+
+        const visitantes = await Visitante.find(tenantFilter)
             .populate("residenteId", "nombre cedula")
             .populate("parqueadero", "numero estado");
         res.json(visitantes);
@@ -109,11 +125,14 @@ exports.obtenerVisitantes = async (req, res) => {
 
 /**
  * Obtener visitantes de un residente específico
+ * 🏢 Filtrado por conjunto del usuario
  */
 exports.obtenerVisitantesPorResidente = async (req, res) => {
     try {
         const { residenteId } = req.params;
-        const visitantes = await Visitante.find({ residenteId })
+        const tenantFilter = getTenantFilter(req);
+
+        const visitantes = await Visitante.find({ ...tenantFilter, residenteId })
             .populate("parqueadero", "numero estado");
         res.json(visitantes);
     } catch (error) {
@@ -124,14 +143,17 @@ exports.obtenerVisitantesPorResidente = async (req, res) => {
 
 /**
  * Eliminar visitante y liberar plaza
+ * 🏢 Solo puede eliminar visitantes de su conjunto
  */
 exports.eliminarVisitante = async (req, res) => {
     try {
         const { residenteId, visitanteId } = req.params;
         const ejecutadoPor = req.body?.ejecutadoPor || null;
+        const tenantFilter = getTenantFilter(req);
+        const conjuntoId = getConjuntoId(req);
 
-        // Construir query - si residenteId es "undefined" o "admin", buscar solo por visitanteId
-        let query = { _id: visitanteId };
+        // Construir query con filtro de conjunto
+        let query = { ...tenantFilter, _id: visitanteId };
         if (residenteId && residenteId !== "undefined" && residenteId !== "admin" && residenteId !== "null") {
             query.residenteId = residenteId;
         }
@@ -154,9 +176,10 @@ exports.eliminarVisitante = async (req, res) => {
         // Eliminar visitante
         await Visitante.findByIdAndDelete(visitanteId);
 
-        // Registrar en auditoría
+        // Registrar en auditoría con conjunto
         if (ejecutadoPor) {
             await AuditLog.registrar({
+                conjunto: conjuntoId,
                 usuario: {
                     id: ejecutadoPor.id,
                     cedula: ejecutadoPor.cedula,
@@ -187,8 +210,8 @@ exports.eliminarVisitante = async (req, res) => {
             });
         }
 
-        // Devolver plazas actualizadas
-        const plazasActualizadas = await Parqueadero.find().populate("visitante");
+        // Devolver plazas actualizadas del conjunto
+        const plazasActualizadas = await Parqueadero.find(tenantFilter).populate("visitante");
 
         res.status(200).json({
             mensaje: "Visitante eliminado y plaza liberada",
@@ -202,14 +225,17 @@ exports.eliminarVisitante = async (req, res) => {
 
 /**
  * Editar visitante
+ * 🏢 Solo puede editar visitantes de su conjunto
  */
 exports.editarVisitante = async (req, res) => {
     try {
         const { visitanteId } = req.params;
         const { nombre, apellido, cedula, placaVehiculo, ejecutadoPor } = req.body;
+        const tenantFilter = getTenantFilter(req);
+        const conjuntoId = getConjuntoId(req);
 
-        // Obtener estado anterior antes de actualizar
-        const visitanteAnterior = await Visitante.findById(visitanteId).lean();
+        // Obtener estado anterior antes de actualizar (verificando que pertenece al conjunto)
+        const visitanteAnterior = await Visitante.findOne({ ...tenantFilter, _id: visitanteId }).lean();
         if (!visitanteAnterior) {
             return res.status(404).json({ mensaje: "Visitante no encontrado" });
         }
@@ -227,9 +253,10 @@ exports.editarVisitante = async (req, res) => {
         const visitanteActualizado = await Visitante.findById(visitanteId)
             .populate("parqueadero", "numero estado");
 
-        // Registrar cambios en auditoría
+        // Registrar cambios en auditoría con conjunto
         if (ejecutadoPor) {
             await AuditLog.registrar({
+                conjunto: conjuntoId,
                 usuario: {
                     id: ejecutadoPor.id,
                     cedula: ejecutadoPor.cedula,
@@ -281,10 +308,12 @@ exports.editarVisitante = async (req, res) => {
 
 /**
  * Ver todas las plazas con visitantes
+ * 🏢 Filtrado por conjunto del usuario
  */
 exports.obtenerPlazasConVisitantes = async (req, res) => {
     try {
-        const plazas = await Parqueadero.find().populate("visitante");
+        const tenantFilter = getTenantFilter(req);
+        const plazas = await Parqueadero.find(tenantFilter).populate("visitante");
         res.json(plazas);
     } catch (error) {
         console.error("Error al obtener plazas:", error);

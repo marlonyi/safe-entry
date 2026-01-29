@@ -4,12 +4,13 @@ const visitanteController = require("../controllers/visitanteController");
 const Parqueadero = require("../config/models/parqueadero");
 const Visitante = require("../config/models/visitante");
 const { verificarToken, esPorteriaOAdmin } = require("../middlewares/auth.middleware");
+const { verificarLimiteVisitantes } = require("../middlewares/planLimits.middleware");
 
 // =======================================================
 // 📌 Registrar visitante (con asignación automática de plaza)
-// Requiere autenticación
+// Requiere autenticación + verificar límite de plan
 // =======================================================
-router.post("/", verificarToken, visitanteController.registrarVisitante);
+router.post("/", verificarToken, verificarLimiteVisitantes, visitanteController.registrarVisitante);
 
 // =======================================================
 // 📌 Obtener todos los visitantes
