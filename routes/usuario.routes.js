@@ -31,6 +31,14 @@ router.get("/perfil/:id", verificarToken, usuarioController.obtenerMiPerfil);
 router.put("/perfil/:id/foto", verificarToken, usuarioController.actualizarFotoPerfil);
 
 // ========================================
+// 📌 Rutas de contraseña
+// ========================================
+// Cambiar contraseña propia (requiere contraseña actual)
+router.put("/me/password", verificarToken, usuarioController.cambiarPassword);
+// SuperAdmin: Restablecer contraseña de cualquier usuario
+router.put("/:id/restablecer-password", verificarToken, esSuperAdmin, usuarioController.restablecerPassword);
+
+// ========================================
 // 📌 Rutas QR de Acceso (usuario autenticado)
 // ========================================
 router.get("/:id/qr-acceso", verificarToken, usuarioController.generarQRAcceso);

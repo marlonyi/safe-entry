@@ -1124,3 +1124,151 @@ exports.verificarQRAcceso = async (req, res) => {
         res.status(500).json({ valid: false, error: "Error al verificar QR" });
     }
 };
+
+// ========================================
+// 📌 CAMBIAR CONTRASEÑA (usuario autenticado)
+// PUT /api/usuarios/me/password
+// ========================================
+exports.cambiarPassword = async (req, res) => {
+    try {
+        const userId = req.usuario.id;
+        const { passwordActual, passwordNueva } = req.body;
+
+        // Validar que se enviaron ambos campos
+        if (!passwordActual || !passwordNueva) {
+            return res.status(400).json({
+                error: "Debe proporcionar la contraseña actual y la nueva contraseña"
+            });
+        }
+
+        // Validar longitud mínima de nueva contraseña
+        if (passwordNueva.length < 6) {
+            return res.status(400).json({
+                error: "La nueva contraseña debe tener al menos 6 caracteres"
+            });
+        }
+
+        // Buscar usuario en BD
+        const usuario = await Usuario.findById(userId).select('+password');
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Verificar contraseña actual
+        const passwordValida = await bcrypt.compare(passwordActual, usuario.password);
+        if (!passwordValida) {
+            return res.status(401).json({ error: "La contraseña actual es incorrecta" });
+        }
+
+        // Hashear nueva contraseña
+        const salt = await bcrypt.genSalt(10);
+        const passwordHasheada = await bcrypt.hash(passwordNueva, salt);
+
+        // Actualizar contraseña
+        usuario.password = passwordHasheada;
+        await usuario.save();
+
+        // Registrar en auditoría
+        try {
+            await AuditLog.create({
+                accion: 'CAMBIO_PASSWORD',
+                usuario: userId,
+                conjunto: usuario.conjunto,
+                detalles: { mensaje: 'Usuario cambió su contraseña' },
+                ip: req.ip || req.connection?.remoteAddress
+            });
+        } catch (auditError) {
+            console.error("Error al registrar auditoría:", auditError);
+        }
+
+        console.log(`🔐 Usuario ${usuario.cedula} cambió su contraseña`);
+        res.json({ mensaje: "Contraseña actualizada correctamente" });
+
+    } catch (error) {
+        console.error("Error al cambiar contraseña:", error);
+        res.status(500).json({ error: "Error al cambiar contraseña", detalles: error.message });
+    }
+};
+
+// ========================================
+// 📌 RESTABLECER CONTRASEÑA (SuperAdmin only)
+// PUT /api/usuarios/:id/restablecer-password
+// ========================================
+exports.restablecerPassword = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { nuevaPassword } = req.body;
+
+        // Si no se proporciona contraseña, generar una temporal
+        let password = nuevaPassword;
+        if (!password) {
+            // Generar contraseña temporal de 8 caracteres
+            const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+            password = '';
+            for (let i = 0; i < 8; i++) {
+                password += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+        }
+
+        // Validar longitud
+        if (password.length < 6) {
+            return res.status(400).json({
+                error: "La contraseña debe tener al menos 6 caracteres"
+            });
+        }
+
+        // Buscar usuario
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "ID de usuario no válido" });
+        }
+
+        const usuario = await Usuario.findById(id);
+        if (!usuario) {
+            return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // Hashear nueva contraseña
+        const salt = await bcrypt.genSalt(10);
+        const passwordHasheada = await bcrypt.hash(password, salt);
+
+        // Actualizar
+        usuario.password = passwordHasheada;
+        await usuario.save();
+
+        // Registrar en auditoría
+        try {
+            await AuditLog.create({
+                accion: 'RESTABLECER_PASSWORD',
+                usuario: req.usuario.id,
+                conjunto: usuario.conjunto,
+                detalles: {
+                    usuarioAfectado: usuario._id.toString(),
+                    cedulaAfectado: usuario.cedula,
+                    mensaje: `SuperAdmin restableció contraseña de ${usuario.nombre} ${usuario.apellido}`
+                },
+                ip: req.ip || req.connection?.remoteAddress
+            });
+        } catch (auditError) {
+            console.error("Error al registrar auditoría:", auditError);
+        }
+
+        console.log(`🔐 SuperAdmin restableció contraseña de ${usuario.cedula}`);
+
+        res.json({
+            mensaje: `Contraseña restablecida para ${usuario.nombre} ${usuario.apellido}`,
+            usuario: {
+                id: usuario._id,
+                nombre: usuario.nombre,
+                apellido: usuario.apellido,
+                cedula: usuario.cedula
+            },
+            // Solo devolver la contraseña temporal si fue generada automáticamente
+            passwordTemporal: !nuevaPassword ? password : undefined
+        });
+
+    } catch (error) {
+        console.error("Error al restablecer contraseña:", error);
+        res.status(500).json({ error: "Error al restablecer contraseña", detalles: error.message });
+    }
+};
