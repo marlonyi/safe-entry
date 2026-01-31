@@ -1,0 +1,17 @@
+# QR Scanner - Sistema de Control de Acceso Residencial
+# Requiere Python 3.8+
+
+# Dependencias principales
+opencv-python>=4.8.0
+pyzbar>=0.1.9
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Interfaz gráfica moderna
+customtkinter>=5.2.0
+Pillow>=10.0.0
+
+# Sonidos de feedback
+
+# Opcional: Si quieres usar MongoDB directamente
+# pymongo>=4.0.0

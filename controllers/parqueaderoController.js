@@ -170,7 +170,7 @@ const registrarEntrada = async (req, res) => {
             tipoUsuario: "visitante",
             nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
             plaza: plaza.numero,
-            conjunto: visitante.conjunto // Incluir conjunto en historial
+            conjunto: visitante.conjunto || conjuntoId  // Fallback al conjuntoId del body
         });
 
         logger.debug(`🚗 Entrada registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
@@ -349,7 +349,8 @@ const registrarSalida = async (req, res) => {
             tipoAcceso: "salida",
             tipoUsuario: "visitante",
             nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-            plaza: plaza.numero
+            plaza: plaza.numero,
+            conjunto: visitante.conjunto || conjuntoId  // Fallback al conjuntoId del body
         });
 
         logger.debug(`🚗 Salida registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
@@ -382,7 +383,7 @@ const registrarSalida = async (req, res) => {
  */
 const registrarAcceso = async (req, res) => {
     try {
-        const { placa } = req.body;
+        const { placa, conjuntoId } = req.body;
 
         if (!placa) {
             return res.status(400).json({
@@ -393,8 +394,13 @@ const registrarAcceso = async (req, res) => {
 
         const placaUpper = placa.toUpperCase();
 
-        // Buscar visitante por placa
-        const visitante = await Visitante.findOne({ placaVehiculo: placaUpper });
+        // Determinar filtro de conjunto
+        const tenantFilter = conjuntoId
+            ? { conjunto: conjuntoId }
+            : getTenantFilter(req);
+
+        // Buscar visitante por placa EN EL CONJUNTO
+        const visitante = await Visitante.findOne({ ...tenantFilter, placaVehiculo: placaUpper });
 
         if (visitante) {
             // Si está ingresado, registrar salida
@@ -419,7 +425,8 @@ const registrarAcceso = async (req, res) => {
                     tipoAcceso: "salida",
                     tipoUsuario: "visitante",
                     nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-                    plaza: plaza?.numero || null
+                    plaza: plaza?.numero || null,
+                    conjunto: visitante.conjunto || conjuntoId  // Fallback al conjuntoId del body
                 });
 
                 logger.debug(`🚗 SALIDA registrada: ${visitante.nombre} ${visitante.apellido}`);
@@ -455,7 +462,8 @@ const registrarAcceso = async (req, res) => {
                     tipoAcceso: "entrada",
                     tipoUsuario: "visitante",
                     nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-                    plaza: plaza.numero
+                    plaza: plaza.numero,
+                    conjunto: visitante.conjunto || conjuntoId  // Fallback al conjuntoId del body
                 });
 
                 logger.debug(`🚗 ENTRADA registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
@@ -485,7 +493,7 @@ const registrarAcceso = async (req, res) => {
         }
 
         // Buscar residente por placa
-        const residente = await Usuario.findOne({ placaVehiculo: placaUpper });
+        const residente = await Usuario.findOne({ ...tenantFilter, placaVehiculo: placaUpper });
 
         if (residente) {
             // Verificar último acceso para determinar si es entrada o salida
@@ -499,7 +507,8 @@ const registrarAcceso = async (req, res) => {
                 tipoAcceso: tipoAcceso,
                 tipoUsuario: "residente",
                 nombreUsuario: `${residente.nombre} ${residente.apellido}`,
-                plaza: null
+                plaza: null,
+                conjunto: residente.conjunto || conjuntoId  // Fallback al conjuntoId del body
             });
 
             logger.debug(`🚗 ${tipoAcceso.toUpperCase()} registrada (residente): ${residente.nombre} ${residente.apellido}`);

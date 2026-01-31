@@ -72,8 +72,9 @@ exports.crearUsuario = async (req, res) => {
         }
 
         // Validar formato de placa colombiana (opcional)
-        if (placaVehiculo && !/^[A-Z]{3}-?\d{3}$/.test(placaVehiculo)) {
-            return res.status(400).json({ error: "Formato de placa inválido. Use: ABC123 o ABC-123" });
+        // Formatos válidos: ABC123, ABC-123, ABC12D (motos/eléctricos)
+        if (placaVehiculo && !/^[A-Z]{3}-?(\d{3}|\d{2}[A-Z])$/.test(placaVehiculo)) {
+            return res.status(400).json({ error: "Formato de placa inválido. Use: ABC123, ABC-123 o ABC12D" });
         }
 
         // Log solo en desarrollo
