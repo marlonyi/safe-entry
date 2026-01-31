@@ -7,7 +7,11 @@
 const express = require("express");
 const router = express.Router();
 const parqueaderoController = require("../controllers/parqueaderoController");
-const { verificarToken, esPorteriaOAdmin } = require("../middlewares/auth.middleware");
+const { verificarToken, esPorteriaOAdmin, esSuperAdmin, esAdmin } = require("../middlewares/auth.middleware");
+
+// ========================================
+// 📌 Rutas de consulta y operación
+// ========================================
 
 // 📌 Obtener todas las plazas con info del visitante (requiere auth para filtrar por conjunto)
 router.get("/", verificarToken, parqueaderoController.obtenerPlazas);
@@ -18,17 +22,36 @@ router.post("/asignar", verificarToken, esPorteriaOAdmin, parqueaderoController.
 // 📌 Liberar todas las plazas
 router.post("/liberar", verificarToken, esPorteriaOAdmin, parqueaderoController.liberarPlazas);
 
-// 📌 Registrar entrada de vehículo (usado por Python al detectar placa - sin auth para cámaras)
-router.post("/registrar-entrada", parqueaderoController.registrarEntrada);
-
 // 📌 Obtener historial de accesos con filtros
 router.get("/historial", verificarToken, parqueaderoController.obtenerHistorial);
 
-// 📌 Registrar salida de vehículo (usado por Python - sin auth para cámaras)
+// ========================================
+// 📌 Rutas para cámaras (sin auth - Python)
+// ========================================
+
+// 📌 Registrar entrada de vehículo (usado por Python al detectar placa)
+router.post("/registrar-entrada", parqueaderoController.registrarEntrada);
+
+// 📌 Registrar salida de vehículo (usado por Python)
 router.post("/registrar-salida", parqueaderoController.registrarSalida);
 
 // 📌 Registrar acceso genérico (para Python - detecta automáticamente entrada o salida)
 router.post("/registrar-acceso", parqueaderoController.registrarAcceso);
 
-module.exports = router;
+// ========================================
+// 📌 Rutas de gestión de plazas
+// ========================================
 
+// 🏢 SUPERADMIN: Obtener plazas de un conjunto específico
+router.get("/conjunto/:conjuntoId", verificarToken, esSuperAdmin, parqueaderoController.obtenerPlazasConjunto);
+
+// 🏢 SUPERADMIN: Crear plazas para un conjunto
+router.post("/conjunto/:conjuntoId/crear", verificarToken, esSuperAdmin, parqueaderoController.crearPlazasConjunto);
+
+// 🏢 SUPERADMIN: Eliminar una plaza
+router.delete("/:id", verificarToken, esSuperAdmin, parqueaderoController.eliminarPlaza);
+
+// 📝 ADMIN o SUPERADMIN: Editar número de una plaza
+router.put("/:id", verificarToken, esAdmin, parqueaderoController.editarPlaza);
+
+module.exports = router;

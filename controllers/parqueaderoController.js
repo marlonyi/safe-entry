@@ -518,6 +518,230 @@ const registrarAcceso = async (req, res) => {
     }
 };
 
+// ========================================
+// 📌 GESTIÓN DE PLAZAS (SuperAdmin / Admin)
+// ========================================
+
+/**
+ * 🏢 SUPERADMIN: Crear plazas de parqueadero para un conjunto
+ * POST /api/parqueaderos/conjunto/:conjuntoId/crear
+ */
+const crearPlazasConjunto = async (req, res) => {
+    try {
+        const { conjuntoId } = req.params;
+        const { cantidad, prefijo = "P" } = req.body;
+
+        console.log('🅿️ Creando plazas - Conjunto:', conjuntoId, '| Cantidad:', cantidad);
+
+        // Validar cantidad
+        if (!cantidad || cantidad < 1 || cantidad > 500) {
+            return res.status(400).json({
+                error: "La cantidad debe estar entre 1 y 500 plazas"
+            });
+        }
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
+            return res.status(400).json({ error: "ID de conjunto no válido" });
+        }
+
+        const Conjunto = require('../config/models/conjunto');
+        const conjunto = await Conjunto.findById(conjuntoId);
+        if (!conjunto) {
+            return res.status(404).json({ error: "Conjunto no encontrado" });
+        }
+
+        // Verificar plazas existentes
+        const plazasExistentes = await Parqueadero.countDocuments({ conjunto: conjuntoId });
+
+        // Verificar límite según plan
+        const maxPermitidas = conjunto.plan?.limites?.maxParqueaderos || conjunto.configuracion?.maxParqueaderos || 100;
+        if (plazasExistentes + cantidad > maxPermitidas) {
+            return res.status(400).json({
+                error: `Excede el límite del plan. Máximo: ${maxPermitidas}, Actuales: ${plazasExistentes}, Solicitadas: ${cantidad}`
+            });
+        }
+
+        // Obtener el número más alto existente para continuar la secuencia
+        const ultimaPlaza = await Parqueadero.findOne({ conjunto: conjuntoId })
+            .sort({ numero: -1 })
+            .lean();
+
+        let ultimoNumero = 0;
+        if (ultimaPlaza && ultimaPlaza.numero) {
+            const match = ultimaPlaza.numero.match(/(\d+)/);
+            if (match) ultimoNumero = parseInt(match[1]);
+        }
+
+        // Crear las plazas
+        const plazasNuevas = [];
+        for (let i = 1; i <= cantidad; i++) {
+            plazasNuevas.push({
+                conjunto: conjuntoId,
+                numero: `${prefijo}${ultimoNumero + i}`,
+                estado: "DISPONIBLE",
+                visitante: null,
+                horaEntrada: null
+            });
+        }
+
+        const plazasCreadas = await Parqueadero.insertMany(plazasNuevas);
+
+        console.log(`✅ ${plazasCreadas.length} plazas creadas para ${conjunto.nombre}`);
+
+        res.status(201).json({
+            mensaje: `${plazasCreadas.length} plazas creadas correctamente`,
+            plazas: plazasCreadas.map(p => ({ id: p._id, numero: p.numero })),
+            totalPlazas: plazasExistentes + plazasCreadas.length
+        });
+    } catch (error) {
+        console.error("❌ Error al crear plazas:", error);
+        res.status(500).json({ error: "Error al crear plazas", detalles: error.message });
+    }
+};
+
+/**
+ * 🏢 SUPERADMIN: Eliminar una plaza de parqueadero
+ * DELETE /api/parqueaderos/:id
+ */
+const eliminarPlaza = async (req, res) => {
+    try {
+        const { id } = req.params;
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "ID de plaza no válido" });
+        }
+
+        const plaza = await Parqueadero.findById(id);
+        if (!plaza) {
+            return res.status(404).json({ error: "Plaza no encontrada" });
+        }
+
+        // No permitir eliminar si está ocupada
+        if (plaza.estado === "OCUPADO" || plaza.estado === "EN_ESPERA") {
+            return res.status(400).json({
+                error: "No se puede eliminar una plaza ocupada. Libérela primero."
+            });
+        }
+
+        await Parqueadero.findByIdAndDelete(id);
+
+        console.log(`🗑️ Plaza ${plaza.numero} eliminada`);
+
+        res.json({
+            mensaje: `Plaza ${plaza.numero} eliminada correctamente`,
+            plazaEliminada: { id: plaza._id, numero: plaza.numero }
+        });
+    } catch (error) {
+        console.error("❌ Error al eliminar plaza:", error);
+        res.status(500).json({ error: "Error al eliminar plaza", detalles: error.message });
+    }
+};
+
+/**
+ * 📝 ADMIN/SUPERADMIN: Editar número de una plaza
+ * PUT /api/parqueaderos/:id
+ */
+const editarPlaza = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { numero } = req.body;
+
+        if (!numero || numero.trim() === "") {
+            return res.status(400).json({ error: "El número de plaza es requerido" });
+        }
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ error: "ID de plaza no válido" });
+        }
+
+        const plaza = await Parqueadero.findById(id);
+        if (!plaza) {
+            return res.status(404).json({ error: "Plaza no encontrada" });
+        }
+
+        // Verificar que el nuevo número no exista en el mismo conjunto
+        const duplicado = await Parqueadero.findOne({
+            conjunto: plaza.conjunto,
+            numero: numero.trim(),
+            _id: { $ne: id }
+        });
+
+        if (duplicado) {
+            return res.status(400).json({
+                error: `Ya existe una plaza con el número "${numero}" en este conjunto`
+            });
+        }
+
+        const numeroAnterior = plaza.numero;
+        plaza.numero = numero.trim();
+        await plaza.save();
+
+        console.log(`✏️ Plaza renombrada: ${numeroAnterior} -> ${plaza.numero}`);
+
+        res.json({
+            mensaje: `Plaza renombrada de ${numeroAnterior} a ${plaza.numero}`,
+            plaza: { id: plaza._id, numero: plaza.numero }
+        });
+    } catch (error) {
+        console.error("❌ Error al editar plaza:", error);
+        res.status(500).json({ error: "Error al editar plaza", detalles: error.message });
+    }
+};
+
+/**
+ * 📋 Obtener plazas de un conjunto específico (para SuperAdmin)
+ * GET /api/parqueaderos/conjunto/:conjuntoId
+ */
+const obtenerPlazasConjunto = async (req, res) => {
+    try {
+        const { conjuntoId } = req.params;
+
+        const mongoose = require('mongoose');
+        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
+            return res.status(400).json({ error: "ID de conjunto no válido" });
+        }
+
+        const plazas = await Parqueadero.find({ conjunto: conjuntoId })
+            .populate({
+                path: "visitante",
+                select: "nombre apellido placaVehiculo"
+            })
+            .sort({ numero: 1 })
+            .lean();
+
+        // Ordenar numéricamente
+        const plazasOrdenadas = plazas.sort((a, b) => {
+            const numA = parseInt(a.numero.replace(/\D/g, '')) || 0;
+            const numB = parseInt(b.numero.replace(/\D/g, '')) || 0;
+            return numA - numB;
+        });
+
+        const stats = {
+            total: plazas.length,
+            disponibles: plazas.filter(p => p.estado === "DISPONIBLE").length,
+            ocupadas: plazas.filter(p => p.estado === "OCUPADO").length,
+            enEspera: plazas.filter(p => p.estado === "EN_ESPERA").length
+        };
+
+        res.json({
+            plazas: plazasOrdenadas.map(p => ({
+                _id: p._id,
+                numero: p.numero,
+                estado: p.estado,
+                visitante: p.visitante ? `${p.visitante.nombre} ${p.visitante.apellido}` : null,
+                placa: p.visitante?.placaVehiculo || null
+            })),
+            estadisticas: stats
+        });
+    } catch (error) {
+        console.error("❌ Error al obtener plazas del conjunto:", error);
+        res.status(500).json({ error: "Error al obtener plazas", detalles: error.message });
+    }
+};
+
 module.exports = {
     obtenerPlazas,
     asignarVisitante,
@@ -525,5 +749,10 @@ module.exports = {
     registrarEntrada,
     obtenerHistorial,
     registrarSalida,
-    registrarAcceso
+    registrarAcceso,
+    // Nuevas funciones de gestión
+    crearPlazasConjunto,
+    eliminarPlaza,
+    editarPlaza,
+    obtenerPlazasConjunto
 };

@@ -778,12 +778,25 @@ exports.moverAConjunto = async (req, res) => {
         const { id } = req.params;
         const { conjuntoId } = req.body;
 
+        console.log('📦 moverAConjunto - ID usuario:', id, '| conjuntoId:', conjuntoId);
+
+        // Validar que se recibió un conjuntoId
+        if (!conjuntoId || conjuntoId === '' || conjuntoId === 'null' || conjuntoId === 'undefined') {
+            return res.status(400).json({
+                error: "Debe seleccionar un conjunto válido",
+                detalle: `Valor recibido: "${conjuntoId}"`
+            });
+        }
+
         const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ error: "ID de usuario no válido" });
         }
         if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
-            return res.status(400).json({ error: "ID de conjunto no válido" });
+            return res.status(400).json({
+                error: "ID de conjunto no válido",
+                detalle: `El valor "${conjuntoId}" no es un ID de MongoDB válido`
+            });
         }
 
         const Conjunto = require('../config/models/conjunto');
@@ -805,6 +818,8 @@ exports.moverAConjunto = async (req, res) => {
         usuario.conjunto = conjuntoId;
         await usuario.save();
 
+        console.log('✅ Usuario movido exitosamente:', usuario.nombre, '->', conjunto.nombre);
+
         res.json({
             mensaje: `Usuario movido a ${conjunto.nombre}`,
             usuario: {
@@ -814,7 +829,7 @@ exports.moverAConjunto = async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error al mover usuario:", error);
+        console.error("❌ Error al mover usuario:", error);
         res.status(500).json({ error: "Error al mover usuario", detalles: error.message });
     }
 };
