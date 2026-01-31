@@ -574,11 +574,12 @@ const crearPlazasConjunto = async (req, res) => {
             if (match) ultimoNumero = parseInt(match[1]);
         }
 
-        // Crear las plazas
+        // Crear las plazas - IMPORTANTE: convertir conjuntoId a ObjectId
+        const conjuntoObjectId = new mongoose.Types.ObjectId(conjuntoId);
         const plazasNuevas = [];
         for (let i = 1; i <= cantidad; i++) {
             plazasNuevas.push({
-                conjunto: conjuntoId,
+                conjunto: conjuntoObjectId,
                 numero: `${prefijo}${ultimoNumero + i}`,
                 estado: "DISPONIBLE",
                 visitante: null,
@@ -586,15 +587,25 @@ const crearPlazasConjunto = async (req, res) => {
             });
         }
 
-        const plazasCreadas = await Parqueadero.insertMany(plazasNuevas);
+        try {
+            const plazasCreadas = await Parqueadero.insertMany(plazasNuevas, { ordered: false });
+            console.log(`✅ ${plazasCreadas.length} plazas creadas para ${conjunto.nombre}`);
 
-        console.log(`✅ ${plazasCreadas.length} plazas creadas para ${conjunto.nombre}`);
-
-        res.status(201).json({
-            mensaje: `${plazasCreadas.length} plazas creadas correctamente`,
-            plazas: plazasCreadas.map(p => ({ id: p._id, numero: p.numero })),
-            totalPlazas: plazasExistentes + plazasCreadas.length
-        });
+            res.status(201).json({
+                mensaje: `${plazasCreadas.length} plazas creadas correctamente`,
+                plazas: plazasCreadas.map(p => ({ id: p._id, numero: p.numero })),
+                totalPlazas: plazasExistentes + plazasCreadas.length
+            });
+        } catch (insertError) {
+            // Error de duplicados (índice único)
+            if (insertError.code === 11000) {
+                console.error("❌ Error de duplicados:", insertError.message);
+                return res.status(400).json({
+                    error: "Algunas plazas ya existen con esos números. Intenta con otro prefijo."
+                });
+            }
+            throw insertError;
+        }
     } catch (error) {
         console.error("❌ Error al crear plazas:", error);
         res.status(500).json({ error: "Error al crear plazas", detalles: error.message });
