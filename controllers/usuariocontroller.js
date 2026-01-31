@@ -11,7 +11,7 @@ const isProduction = process.env.NODE_ENV === 'production';
 // En desarrollo usa valores por defecto, en producción DEBE configurarse
 const ADMIN_CEDULA = process.env.ADMIN_CEDULA || "99999999";
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (isProduction ? null : "admin123");
-const JWT_SECRET = process.env.JWT_SECRET || (isProduction ? null : "secreto_desarrollo_no_usar_en_prod");
+const JWT_SECRET = process.env.JWT_SECRET || "secreto"; // Debe coincidir con auth.middleware.js
 
 // Validar configuración crítica en producción
 if (isProduction && !ADMIN_PASSWORD) {
