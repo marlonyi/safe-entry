@@ -529,14 +529,15 @@ const registrarAcceso = async (req, res) => {
 const crearPlazasConjunto = async (req, res) => {
     try {
         const { conjuntoId } = req.params;
-        const { cantidad, prefijo = "P" } = req.body;
+        const prefijo = req.body.prefijo || "P";
+        const cantidad = parseInt(req.body.cantidad);
 
-        console.log('🅿️ Creando plazas - Conjunto:', conjuntoId, '| Cantidad:', cantidad);
+        console.log('🅿️ Creando plazas - Conjunto:', conjuntoId, '| Cantidad:', cantidad, '| Prefijo:', prefijo);
 
         // Validar cantidad
-        if (!cantidad || cantidad < 1 || cantidad > 500) {
+        if (isNaN(cantidad) || cantidad < 1 || cantidad > 500) {
             return res.status(400).json({
-                error: "La cantidad debe estar entre 1 y 500 plazas"
+                error: "La cantidad debe ser un número entre 1 y 500 plazas"
             });
         }
 
