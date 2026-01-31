@@ -7,17 +7,18 @@ const logger = require("../config/logger");
 // Verificar ambiente
 const isProduction = process.env.NODE_ENV === 'production';
 
-// Credenciales admin desde variables de entorno (SIN valores por defecto inseguros en producción)
+// Credenciales admin desde variables de entorno
+// En desarrollo usa valores por defecto, en producción DEBE configurarse
 const ADMIN_CEDULA = process.env.ADMIN_CEDULA || "99999999";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
-const JWT_SECRET = process.env.JWT_SECRET;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || (isProduction ? null : "admin123");
+const JWT_SECRET = process.env.JWT_SECRET || (isProduction ? null : "secreto_desarrollo_no_usar_en_prod");
 
 // Validar configuración crítica en producción
-if (isProduction && (!ADMIN_PASSWORD || ADMIN_PASSWORD === 'admin123')) {
-    console.error('⚠️ SEGURIDAD: ADMIN_PASSWORD no configurado o inseguro en producción');
+if (isProduction && !ADMIN_PASSWORD) {
+    console.error('⚠️ SEGURIDAD CRÍTICA: ADMIN_PASSWORD no configurado en producción');
 }
-if (isProduction && (!JWT_SECRET || JWT_SECRET === 'secreto')) {
-    console.error('⚠️ SEGURIDAD: JWT_SECRET no configurado o inseguro en producción');
+if (isProduction && !JWT_SECRET) {
+    console.error('⚠️ SEGURIDAD CRÍTICA: JWT_SECRET no configurado en producción');
 }
 
 const ADMIN_INFO = {
