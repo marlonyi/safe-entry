@@ -7,6 +7,7 @@ const Visitante = require('../config/models/visitante');
 const Parqueadero = require('../config/models/parqueadero');
 const AuditLog = require('../config/models/auditLog');
 const { getTenantFilter, getConjuntoId } = require('../middlewares/auth.middleware');
+const logger = require('../config/logger');
 
 /**
  * Registrar visitante con asignación automática de plaza
@@ -92,7 +93,7 @@ exports.registrarVisitante = async (req, res) => {
 
         res.status(201).json({ visitante: nuevoVisitante, plaza });
     } catch (error) {
-        console.error("Error al registrar visitante:", error);
+        logger.error("Error al registrar visitante:", error);
 
         // Manejar error de duplicado
         if (error.code === 11000) {
@@ -118,7 +119,7 @@ exports.obtenerVisitantes = async (req, res) => {
             .populate("parqueadero", "numero estado");
         res.json(visitantes);
     } catch (error) {
-        console.error("Error al obtener visitantes:", error);
+        logger.error("Error al obtener visitantes:", error);
         res.status(500).json({ mensaje: "Error al obtener visitantes" });
     }
 };
@@ -136,7 +137,7 @@ exports.obtenerVisitantesPorResidente = async (req, res) => {
             .populate("parqueadero", "numero estado");
         res.json(visitantes);
     } catch (error) {
-        console.error("Error al obtener visitantes del residente:", error);
+        logger.error("Error al obtener visitantes del residente:", error);
         res.status(500).json({ mensaje: "Error al obtener visitantes" });
     }
 };
@@ -170,7 +171,7 @@ exports.eliminarVisitante = async (req, res) => {
                 estado: "DISPONIBLE",
                 visitante: null
             });
-            console.log(`✅ Plaza ${visitante.parqueadero} liberada correctamente`);
+            logger.debug(`✅ Plaza ${visitante.parqueadero} liberada correctamente`);
         }
 
         // Eliminar visitante
@@ -218,7 +219,7 @@ exports.eliminarVisitante = async (req, res) => {
             plazas: plazasActualizadas
         });
     } catch (error) {
-        console.error("Error al eliminar visitante:", error);
+        logger.error("Error al eliminar visitante:", error);
         res.status(500).json({ mensaje: "Error al eliminar visitante" });
     }
 };
@@ -294,7 +295,7 @@ exports.editarVisitante = async (req, res) => {
 
         res.json({ mensaje: "Visitante actualizado con éxito", visitante: visitanteActualizado });
     } catch (error) {
-        console.error("Error al actualizar visitante:", error);
+        logger.error("Error al actualizar visitante:", error);
 
         if (error.code === 11000) {
             return res.status(400).json({
@@ -316,7 +317,8 @@ exports.obtenerPlazasConVisitantes = async (req, res) => {
         const plazas = await Parqueadero.find(tenantFilter).populate("visitante");
         res.json(plazas);
     } catch (error) {
-        console.error("Error al obtener plazas:", error);
+        logger.error("Error al obtener plazas:", error);
         res.status(500).json({ mensaje: "Error al obtener plazas" });
     }
 };
+

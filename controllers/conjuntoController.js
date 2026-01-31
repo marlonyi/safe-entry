@@ -4,6 +4,19 @@ const Usuario = require("../config/models/usuario");
 const Visitante = require("../config/models/visitante");
 const Parqueadero = require("../config/models/parqueadero");
 const AuditLog = require("../config/models/auditLog");
+const logger = require("../config/logger");
+
+// Verificar ambiente
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Helper para manejar errores (oculta detalles en producción)
+const getErrorDetails = (error) => {
+    if (isProduction) {
+        logger.error('Error en conjunto:', error.message);
+        return undefined;
+    }
+    return error.message;
+};
 
 /**
  * Crear un nuevo conjunto residencial
@@ -89,10 +102,10 @@ const crearConjunto = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error creando conjunto:", error);
+        logger.error("Error creando conjunto:", error);
         res.status(500).json({
             error: "Error interno al crear el conjunto",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -165,10 +178,10 @@ const obtenerConjuntos = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error obteniendo conjuntos:", error);
+        logger.error("Error obteniendo conjuntos:", error);
         res.status(500).json({
             error: "Error interno al obtener conjuntos",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -215,10 +228,10 @@ const obtenerConjuntoPorId = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error obteniendo conjunto:", error);
+        logger.error("Error obteniendo conjunto:", error);
         res.status(500).json({
             error: "Error interno al obtener conjunto",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -294,10 +307,10 @@ const actualizarConjunto = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error actualizando conjunto:", error);
+        logger.error("Error actualizando conjunto:", error);
         res.status(500).json({
             error: "Error interno al actualizar conjunto",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -375,10 +388,10 @@ const eliminarConjunto = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error eliminando conjunto:", error);
+        logger.error("Error eliminando conjunto:", error);
         res.status(500).json({
             error: "Error interno al eliminar conjunto",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -442,10 +455,10 @@ const obtenerEstadisticasGlobales = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error obteniendo estadísticas:", error);
+        logger.error("Error obteniendo estadísticas:", error);
         res.status(500).json({
             error: "Error interno al obtener estadísticas",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -464,10 +477,10 @@ const listarConjuntosParaSelector = async (req, res) => {
         res.json(conjuntos);
 
     } catch (error) {
-        console.error("Error listando conjuntos:", error);
+        logger.error("Error listando conjuntos:", error);
         res.status(500).json({
             error: "Error interno",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -545,7 +558,7 @@ const actualizarPlan = async (req, res) => {
                 resultado: 'SUCCESS'
             });
         } catch (auditError) {
-            console.warn('Error registrando auditoría:', auditError.message);
+            logger.warn('Error registrando auditoría:', auditError.message);
         }
 
         res.json({
@@ -558,10 +571,10 @@ const actualizarPlan = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error actualizando plan:", error);
+        logger.error("Error actualizando plan:", error);
         res.status(500).json({
             error: "Error interno al actualizar plan",
-            detalle: error.message
+            detalle: getErrorDetails(error)
         });
     }
 };
@@ -576,3 +589,4 @@ module.exports = {
     listarConjuntosParaSelector,
     actualizarPlan
 };
+

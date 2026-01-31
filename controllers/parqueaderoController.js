@@ -10,6 +10,19 @@ const HistorialAcceso = require("../config/models/historialAcceso");
 const Usuario = require("../config/models/usuario");
 const Visitante = require("../config/models/visitante");
 const { getTenantFilter, isSuperAdmin, getConjuntoId } = require("../middlewares/auth.middleware");
+const logger = require("../config/logger");
+
+// Verificar ambiente
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Helper para manejar errores (oculta detalles en producción)
+const getErrorDetails = (error) => {
+    if (isProduction) {
+        logger.error('Error en parqueadero:', error.message);
+        return undefined;
+    }
+    return error.message;
+};
 
 /**
  * 📌 Obtener todas las plazas con info del visitante
@@ -160,7 +173,7 @@ const registrarEntrada = async (req, res) => {
             conjunto: visitante.conjunto // Incluir conjunto en historial
         });
 
-        console.log(`🚗 Entrada registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
+        logger.debug(`🚗 Entrada registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
 
         res.json({
             success: true,
@@ -176,11 +189,11 @@ const registrarEntrada = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error registrando entrada:", error);
+        logger.error("Error registrando entrada:", error);
         res.status(500).json({
             success: false,
             message: "Error al registrar entrada",
-            error: error.message
+            error: getErrorDetails(error)
         });
     }
 };
@@ -234,11 +247,11 @@ const obtenerHistorial = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error obteniendo historial:", error);
+        logger.error("Error obteniendo historial:", error);
         res.status(500).json({
             success: false,
             message: "Error al obtener historial",
-            error: error.message
+            error: getErrorDetails(error)
         });
     }
 };
@@ -288,7 +301,7 @@ const registrarSalida = async (req, res) => {
                     conjunto: residente.conjunto
                 });
 
-                console.log(`🚗 Salida registrada (residente): ${residente.nombre} ${residente.apellido}`);
+                logger.debug(`🚗 Salida registrada (residente): ${residente.nombre} ${residente.apellido}`);
 
                 return res.json({
                     success: true,
@@ -339,7 +352,7 @@ const registrarSalida = async (req, res) => {
             plaza: plaza.numero
         });
 
-        console.log(`🚗 Salida registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
+        logger.debug(`🚗 Salida registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
 
         res.json({
             success: true,
@@ -354,11 +367,11 @@ const registrarSalida = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error registrando salida:", error);
+        logger.error("Error registrando salida:", error);
         res.status(500).json({
             success: false,
             message: "Error al registrar salida",
-            error: error.message
+            error: getErrorDetails(error)
         });
     }
 };
@@ -409,7 +422,7 @@ const registrarAcceso = async (req, res) => {
                     plaza: plaza?.numero || null
                 });
 
-                console.log(`🚗 SALIDA registrada: ${visitante.nombre} ${visitante.apellido}`);
+                logger.debug(`🚗 SALIDA registrada: ${visitante.nombre} ${visitante.apellido}`);
 
                 return res.json({
                     success: true,
@@ -445,7 +458,7 @@ const registrarAcceso = async (req, res) => {
                     plaza: plaza.numero
                 });
 
-                console.log(`🚗 ENTRADA registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
+                logger.debug(`🚗 ENTRADA registrada: ${visitante.nombre} ${visitante.apellido} - Plaza ${plaza.numero}`);
 
                 return res.json({
                     success: true,
@@ -489,7 +502,7 @@ const registrarAcceso = async (req, res) => {
                 plaza: null
             });
 
-            console.log(`🚗 ${tipoAcceso.toUpperCase()} registrada (residente): ${residente.nombre} ${residente.apellido}`);
+            logger.debug(`🚗 ${tipoAcceso.toUpperCase()} registrada (residente): ${residente.nombre} ${residente.apellido}`);
 
             return res.json({
                 success: true,
@@ -509,11 +522,11 @@ const registrarAcceso = async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error registrando acceso:", error);
+        logger.error("Error registrando acceso:", error);
         res.status(500).json({
             success: false,
             message: "Error al registrar acceso",
-            error: error.message
+            error: getErrorDetails(error)
         });
     }
 };
@@ -532,7 +545,7 @@ const crearPlazasConjunto = async (req, res) => {
         const prefijo = req.body.prefijo || "P";
         const cantidad = parseInt(req.body.cantidad);
 
-        console.log('🅿️ Creando plazas - Conjunto:', conjuntoId, '| Cantidad:', cantidad, '| Prefijo:', prefijo);
+        logger.debug('🅿️ Creando plazas - Conjunto:', conjuntoId, '| Cantidad:', cantidad, '| Prefijo:', prefijo);
 
         // Validar cantidad
         if (isNaN(cantidad) || cantidad < 1 || cantidad > 500) {
@@ -589,7 +602,7 @@ const crearPlazasConjunto = async (req, res) => {
 
         try {
             const plazasCreadas = await Parqueadero.insertMany(plazasNuevas, { ordered: false });
-            console.log(`✅ ${plazasCreadas.length} plazas creadas para ${conjunto.nombre}`);
+            logger.debug(`✅ ${plazasCreadas.length} plazas creadas para ${conjunto.nombre}`);
 
             res.status(201).json({
                 mensaje: `${plazasCreadas.length} plazas creadas correctamente`,
@@ -599,7 +612,7 @@ const crearPlazasConjunto = async (req, res) => {
         } catch (insertError) {
             // Error de duplicados (índice único)
             if (insertError.code === 11000) {
-                console.error("❌ Error de duplicados:", insertError.message);
+                logger.error("❌ Error de duplicados:", insertError.message);
                 return res.status(400).json({
                     error: "Algunas plazas ya existen con esos números. Intenta con otro prefijo."
                 });
@@ -607,8 +620,8 @@ const crearPlazasConjunto = async (req, res) => {
             throw insertError;
         }
     } catch (error) {
-        console.error("❌ Error al crear plazas:", error);
-        res.status(500).json({ error: "Error al crear plazas", detalles: error.message });
+        logger.error("❌ Error al crear plazas:", error);
+        res.status(500).json({ error: "Error al crear plazas", detalles: getErrorDetails(error) });
     }
 };
 
@@ -639,15 +652,15 @@ const eliminarPlaza = async (req, res) => {
 
         await Parqueadero.findByIdAndDelete(id);
 
-        console.log(`🗑️ Plaza ${plaza.numero} eliminada`);
+        logger.debug(`🗑️ Plaza ${plaza.numero} eliminada`);
 
         res.json({
             mensaje: `Plaza ${plaza.numero} eliminada correctamente`,
             plazaEliminada: { id: plaza._id, numero: plaza.numero }
         });
     } catch (error) {
-        console.error("❌ Error al eliminar plaza:", error);
-        res.status(500).json({ error: "Error al eliminar plaza", detalles: error.message });
+        logger.error("❌ Error al eliminar plaza:", error);
+        res.status(500).json({ error: "Error al eliminar plaza", detalles: getErrorDetails(error) });
     }
 };
 
@@ -691,15 +704,15 @@ const editarPlaza = async (req, res) => {
         plaza.numero = numero.trim();
         await plaza.save();
 
-        console.log(`✏️ Plaza renombrada: ${numeroAnterior} -> ${plaza.numero}`);
+        logger.debug(`✏️ Plaza renombrada: ${numeroAnterior} -> ${plaza.numero}`);
 
         res.json({
             mensaje: `Plaza renombrada de ${numeroAnterior} a ${plaza.numero}`,
             plaza: { id: plaza._id, numero: plaza.numero }
         });
     } catch (error) {
-        console.error("❌ Error al editar plaza:", error);
-        res.status(500).json({ error: "Error al editar plaza", detalles: error.message });
+        logger.error("❌ Error al editar plaza:", error);
+        res.status(500).json({ error: "Error al editar plaza", detalles: getErrorDetails(error) });
     }
 };
 
@@ -749,8 +762,8 @@ const obtenerPlazasConjunto = async (req, res) => {
             estadisticas: stats
         });
     } catch (error) {
-        console.error("❌ Error al obtener plazas del conjunto:", error);
-        res.status(500).json({ error: "Error al obtener plazas", detalles: error.message });
+        logger.error("❌ Error al obtener plazas del conjunto:", error);
+        res.status(500).json({ error: "Error al obtener plazas", detalles: getErrorDetails(error) });
     }
 };
 
@@ -768,3 +781,4 @@ module.exports = {
     editarPlaza,
     obtenerPlazasConjunto
 };
+

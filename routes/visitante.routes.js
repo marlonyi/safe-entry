@@ -5,6 +5,8 @@ const Parqueadero = require("../config/models/parqueadero");
 const Visitante = require("../config/models/visitante");
 const { verificarToken, esPorteriaOAdmin } = require("../middlewares/auth.middleware");
 const { verificarLimiteVisitantes } = require("../middlewares/planLimits.middleware");
+const logger = require("../config/logger");
+const isProduction = process.env.NODE_ENV === 'production';
 
 // =======================================================
 // 📌 Registrar visitante (con asignación automática de plaza)
@@ -77,7 +79,7 @@ router.post("/qr/generar/:visitanteId", async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error generando QR:", error);
+        logger.error("Error generando QR:", error);
         res.status(500).json({ error: "Error generando código QR", detalles: error.message });
     }
 });
@@ -114,7 +116,7 @@ router.get("/qr/verificar/:token", async (req, res) => {
             }
         });
     } catch (error) {
-        console.error("Error verificando QR:", error);
+        logger.error("Error verificando QR:", error);
         res.status(500).json({ valid: false, error: "Error verificando código QR" });
     }
 });
@@ -143,7 +145,7 @@ router.post("/qr/ingreso/:token", async (req, res) => {
             hora: new Date().toISOString()
         });
     } catch (error) {
-        console.error("Error registrando ingreso:", error);
+        logger.error("Error registrando ingreso:", error);
         res.status(500).json({ success: false, error: "Error registrando ingreso" });
     }
 });
@@ -175,7 +177,7 @@ router.post("/qr/salida/:token", async (req, res) => {
             hora: new Date().toISOString()
         });
     } catch (error) {
-        console.error("Error registrando salida:", error);
+        logger.error("Error registrando salida:", error);
         res.status(500).json({ success: false, error: "Error registrando salida" });
     }
 });
@@ -224,24 +226,19 @@ router.post("/verificar-acceso", async (req, res) => {
             }
         }
 
-        // DEBUG: Log para diagnosticar
-        const codigoEsperado = visitante.generarCodigoDinamico();
-        console.log('🔐 DEBUG Verificación TOTP:');
-        console.log('   Cédula:', cedula);
-        console.log('   Visitante ID:', visitante._id);
-        console.log('   Código enviado:', codigo);
-        console.log('   Código esperado:', codigoEsperado);
-        console.log('   codigoSecreto (primeros 8 chars):', visitante.codigoSecreto ? visitante.codigoSecreto.substring(0, 8) : 'NO EXISTE');
+        // Log solo en desarrollo
+        if (!isProduction) {
+            const codigoEsperado = visitante.generarCodigoDinamico();
+            logger.debug('Verificación TOTP:', { cedula, visitanteId: visitante._id, codigoEnviado: codigo, codigoEsperado });
+        }
 
         // Verificar código dinámico
         if (!visitante.verificarCodigoDinamico(codigo.trim())) {
-            console.log('   ❌ Código NO coincide');
             return res.status(401).json({
                 success: false,
                 error: "Código inválido o expirado. Solicite uno nuevo al residente."
             });
         }
-        console.log('   ✅ Código VÁLIDO');
 
         // Generar QR válido por 24 horas
         visitante.generarQR(24);
@@ -266,7 +263,7 @@ router.post("/verificar-acceso", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error verificando acceso:", error);
+        logger.error("Error verificando acceso:", error);
         res.status(500).json({ success: false, error: "Error en el servidor" });
     }
 });
@@ -305,12 +302,12 @@ router.get("/:visitanteId/codigo-actual", async (req, res) => {
             }
         }
 
-        // DEBUG log para comparar
         const codigoGenerado = visitante.generarCodigoDinamico();
-        console.log('📋 DEBUG codigo-actual:');
-        console.log('   Visitante ID:', visitante._id);
-        console.log('   Código generado:', codigoGenerado);
-        console.log('   codigoSecreto (primeros 8 chars):', visitante.codigoSecreto ? visitante.codigoSecreto.substring(0, 8) : 'NO EXISTE');
+
+        // Log solo en desarrollo
+        if (!isProduction) {
+            logger.debug('codigo-actual:', { visitanteId: visitante._id, codigoGenerado });
+        }
 
         res.json({
             success: true,
@@ -324,10 +321,11 @@ router.get("/:visitanteId/codigo-actual", async (req, res) => {
         });
 
     } catch (error) {
-        console.error("Error obteniendo código:", error);
+        logger.error("Error obteniendo código:", error);
         res.status(500).json({ success: false, error: "Error en el servidor" });
     }
 });
 
 module.exports = router;
+
 

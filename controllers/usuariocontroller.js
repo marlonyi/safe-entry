@@ -2,11 +2,23 @@ const Usuario = require("../config/models/usuario");
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const AuditLog = require("../config/models/auditLog");
+const logger = require("../config/logger");
 
-// Credenciales admin desde variables de entorno
+// Verificar ambiente
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Credenciales admin desde variables de entorno (SIN valores por defecto inseguros en producción)
 const ADMIN_CEDULA = process.env.ADMIN_CEDULA || "99999999";
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "admin123";
-const JWT_SECRET = process.env.JWT_SECRET || "secreto";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const JWT_SECRET = process.env.JWT_SECRET;
+
+// Validar configuración crítica en producción
+if (isProduction && (!ADMIN_PASSWORD || ADMIN_PASSWORD === 'admin123')) {
+    console.error('⚠️ SEGURIDAD: ADMIN_PASSWORD no configurado o inseguro en producción');
+}
+if (isProduction && (!JWT_SECRET || JWT_SECRET === 'secreto')) {
+    console.error('⚠️ SEGURIDAD: JWT_SECRET no configurado o inseguro en producción');
+}
 
 const ADMIN_INFO = {
     id: "admin",
@@ -14,6 +26,15 @@ const ADMIN_INFO = {
     apellido: "Sistema",
     cedula: ADMIN_CEDULA,
     rol: "admin"
+};
+
+// Helper para manejar errores (oculta detalles en producción)
+const getErrorDetails = (error) => {
+    if (isProduction) {
+        logger.error('Error:', error.message);
+        return undefined; // No exponer detalles en producción
+    }
+    return error.message;
 };
 
 // Crear un nuevo usuario
@@ -54,7 +75,10 @@ exports.crearUsuario = async (req, res) => {
             return res.status(400).json({ error: "Formato de placa inválido. Use: ABC123 o ABC-123" });
         }
 
-        console.log("Datos recibidos:", { nombre, apellido, cedula, rol, tieneVehiculo, placaVehiculo });
+        // Log solo en desarrollo
+        if (!isProduction) {
+            logger.debug("Datos recibidos:", { nombre, apellido, cedula, rol, tieneVehiculo, placaVehiculo });
+        }
 
         const estadosPermitidos = ['al dia', 'en mora'];
         if (estadoExpensa && !estadosPermitidos.includes(estadoExpensa)) {
@@ -149,7 +173,7 @@ exports.crearUsuario = async (req, res) => {
         console.error("Error al crear usuario:", error);
         res.status(500).json({
             error: "Error al crear el usuario",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -420,7 +444,7 @@ exports.obtenerUsuarios = async (req, res) => {
         console.error("Error al obtener usuarios/visitantes:", error);
         res.status(500).json({
             error: "Error al obtener los usuarios y visitantes",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -442,7 +466,7 @@ exports.obtenerUsuarioPorId = async (req, res) => {
         console.error("Error al obtener usuario:", error);
         res.status(500).json({
             error: "Error al obtener el usuario",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -494,7 +518,7 @@ exports.actualizarUsuario = async (req, res) => {
         } : null;
 
         if (logUsuario) {
-            console.log('📝 Registrando auditoría UPDATE_USER por:', logUsuario.nombre, '(', logUsuario.rol, ')');
+            logger.debug('📝 Registrando auditoría UPDATE_USER por:', logUsuario.nombre, '(', logUsuario.rol, ')');
             await AuditLog.registrar({
                 usuario: logUsuario,
                 accion: 'UPDATE_USER',
@@ -531,7 +555,7 @@ exports.actualizarUsuario = async (req, res) => {
                 resultado: 'SUCCESS'
             });
         } else {
-            console.log('⚠️ No se recibió ejecutadoPor para auditoría de UPDATE_USER');
+            logger.debug('⚠️ No se recibió ejecutadoPor para auditoría de UPDATE_USER');
         }
 
         res.json({
@@ -540,7 +564,7 @@ exports.actualizarUsuario = async (req, res) => {
         });
     } catch (error) {
         console.error("Error al actualizar usuario:", error);
-        res.status(500).json({ message: "Error al actualizar el usuario.", detalles: error.message });
+        res.status(500).json({ message: "Error al actualizar el usuario.", detalles: getErrorDetails(error) });
     }
 };
 
@@ -615,7 +639,7 @@ exports.eliminarUsuario = async (req, res) => {
         console.error("Error al eliminar usuario/visitante:", error);
         res.status(500).json({
             error: "Error al eliminar",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -645,7 +669,7 @@ exports.obtenerMiPerfil = async (req, res) => {
         console.error("Error al obtener perfil:", error);
         res.status(500).json({
             error: "Error al obtener el perfil",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -656,7 +680,7 @@ exports.actualizarFotoPerfil = async (req, res) => {
         const { id } = req.params;
         const { fotoPerfil } = req.body;
 
-        console.log('📸 Actualizando foto de perfil para ID:', id);
+        logger.debug('📸 Actualizando foto de perfil para ID:', id);
 
         if (id === "admin") {
             return res.status(400).json({ error: "No se puede modificar el perfil del administrador del sistema" });
@@ -665,7 +689,7 @@ exports.actualizarFotoPerfil = async (req, res) => {
         // Validar que el ID sea un ObjectId válido
         const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
-            console.log('❌ ID no válido:', id);
+            logger.debug('❌ ID no válido:', id);
             return res.status(400).json({ error: "ID de usuario no válido" });
         }
 
@@ -702,7 +726,7 @@ exports.actualizarFotoPerfil = async (req, res) => {
         console.error("Error al actualizar foto de perfil:", error);
         res.status(500).json({
             error: "Error al actualizar la foto de perfil",
-            detalles: error.message
+            detalles: getErrorDetails(error)
         });
     }
 };
@@ -753,7 +777,7 @@ exports.cambiarRol = async (req, res) => {
                 ip: req.ip
             });
         } catch (e) {
-            console.warn('No se pudo registrar auditoría:', e.message);
+            logger.warn('No se pudo registrar auditoría:', e.message);
         }
 
         res.json({
@@ -768,7 +792,7 @@ exports.cambiarRol = async (req, res) => {
         });
     } catch (error) {
         console.error("Error al cambiar rol:", error);
-        res.status(500).json({ error: "Error al cambiar rol", detalles: error.message });
+        res.status(500).json({ error: "Error al cambiar rol", detalles: getErrorDetails(error) });
     }
 };
 
@@ -778,7 +802,7 @@ exports.moverAConjunto = async (req, res) => {
         const { id } = req.params;
         const { conjuntoId } = req.body;
 
-        console.log('📦 moverAConjunto - ID usuario:', id, '| conjuntoId:', conjuntoId);
+        logger.debug('📦 moverAConjunto - ID usuario:', id, '| conjuntoId:', conjuntoId);
 
         // Validar que se recibió un conjuntoId
         if (!conjuntoId || conjuntoId === '' || conjuntoId === 'null' || conjuntoId === 'undefined') {
@@ -818,7 +842,7 @@ exports.moverAConjunto = async (req, res) => {
         usuario.conjunto = conjuntoId;
         await usuario.save();
 
-        console.log('✅ Usuario movido exitosamente:', usuario.nombre, '->', conjunto.nombre);
+        logger.debug('✅ Usuario movido exitosamente:', usuario.nombre, '->', conjunto.nombre);
 
         res.json({
             mensaje: `Usuario movido a ${conjunto.nombre}`,
@@ -830,7 +854,7 @@ exports.moverAConjunto = async (req, res) => {
         });
     } catch (error) {
         console.error("❌ Error al mover usuario:", error);
-        res.status(500).json({ error: "Error al mover usuario", detalles: error.message });
+        res.status(500).json({ error: "Error al mover usuario", detalles: getErrorDetails(error) });
     }
 };
 
@@ -903,7 +927,7 @@ exports.crearAdminRapido = async (req, res) => {
                 resultado: 'SUCCESS'
             });
         } catch (auditError) {
-            console.warn('Error registrando auditoría:', auditError.message);
+            logger.warn('Error registrando auditoría:', auditError.message);
         }
 
         res.status(201).json({
@@ -924,7 +948,7 @@ exports.crearAdminRapido = async (req, res) => {
         });
     } catch (error) {
         console.error("Error al crear admin rápido:", error);
-        res.status(500).json({ error: "Error al crear administrador", detalles: error.message });
+        res.status(500).json({ error: "Error al crear administrador", detalles: getErrorDetails(error) });
     }
 };
 
@@ -997,7 +1021,7 @@ exports.exportarDatosConjunto = async (req, res) => {
         res.json(datos);
     } catch (error) {
         console.error("Error al exportar datos:", error);
-        res.status(500).json({ error: "Error al exportar datos", detalles: error.message });
+        res.status(500).json({ error: "Error al exportar datos", detalles: getErrorDetails(error) });
     }
 };
 
@@ -1045,7 +1069,7 @@ exports.generarQRAcceso = async (req, res) => {
         });
     } catch (error) {
         console.error("Error al generar QR:", error);
-        res.status(500).json({ error: "Error al generar QR", detalles: error.message });
+        res.status(500).json({ error: "Error al generar QR", detalles: getErrorDetails(error) });
     }
 };
 
@@ -1084,7 +1108,7 @@ exports.regenerarQRAcceso = async (req, res) => {
         });
     } catch (error) {
         console.error("Error al regenerar QR:", error);
-        res.status(500).json({ error: "Error al regenerar QR", detalles: error.message });
+        res.status(500).json({ error: "Error al regenerar QR", detalles: getErrorDetails(error) });
     }
 };
 
@@ -1181,12 +1205,12 @@ exports.cambiarPassword = async (req, res) => {
             console.error("Error al registrar auditoría:", auditError);
         }
 
-        console.log(`🔐 Usuario ${usuario.cedula} cambió su contraseña`);
+        logger.debug(`🔐 Usuario ${usuario.cedula} cambió su contraseña`);
         res.json({ mensaje: "Contraseña actualizada correctamente" });
 
     } catch (error) {
         console.error("Error al cambiar contraseña:", error);
-        res.status(500).json({ error: "Error al cambiar contraseña", detalles: error.message });
+        res.status(500).json({ error: "Error al cambiar contraseña", detalles: getErrorDetails(error) });
     }
 };
 
@@ -1253,7 +1277,7 @@ exports.restablecerPassword = async (req, res) => {
             console.error("Error al registrar auditoría:", auditError);
         }
 
-        console.log(`🔐 SuperAdmin restableció contraseña de ${usuario.cedula}`);
+        logger.debug(`🔐 SuperAdmin restableció contraseña de ${usuario.cedula}`);
 
         res.json({
             mensaje: `Contraseña restablecida para ${usuario.nombre} ${usuario.apellido}`,
@@ -1269,6 +1293,9 @@ exports.restablecerPassword = async (req, res) => {
 
     } catch (error) {
         console.error("Error al restablecer contraseña:", error);
-        res.status(500).json({ error: "Error al restablecer contraseña", detalles: error.message });
+        res.status(500).json({ error: "Error al restablecer contraseña", detalles: getErrorDetails(error) });
     }
 };
+
+
+
