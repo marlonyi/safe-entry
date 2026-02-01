@@ -133,7 +133,7 @@ app.get('/api/health', async (req, res) => {
 // 📌 Rutas de Auditoría y Seguridad
 // ========================================
 const { getRateLimitStatus } = require('./middlewares/rateLimit.middleware');
-const { verificarToken, esAdmin } = require('./middlewares/auth.middleware');
+const { verificarToken, esAdmin, getConjuntoId, isSuperAdmin } = require('./middlewares/auth.middleware');
 const cache = require('./config/cache');
 
 // Obtener estadísticas del cache (solo admin)
@@ -154,21 +154,24 @@ app.post('/api/cache/clear', verificarToken, esAdmin, (req, res) => {
     });
 });
 
-// Obtener logs de auditoría (solo admin)
+// 🏢 Obtener logs de auditoría (solo admin) - MULTI-TENANT
 app.get('/api/audit/logs', verificarToken, esAdmin, async (req, res) => {
     try {
         const limite = parseInt(req.query.limite) || 50;
-        const logs = await AuditLog.obtenerRecientes(limite);
+        // 🏢 SuperAdmin ve todos, otros solo de su conjunto
+        const conjuntoId = isSuperAdmin(req) ? null : getConjuntoId(req);
+        const logs = await AuditLog.obtenerRecientes(limite, conjuntoId);
         res.json(logs);
     } catch (error) {
         res.status(500).json({ error: 'Error obteniendo logs', mensaje: error.message });
     }
 });
 
-// Obtener estadísticas de auditoría
+// 🏢 Obtener estadísticas de auditoría - MULTI-TENANT
 app.get('/api/audit/stats', verificarToken, esAdmin, async (req, res) => {
     try {
         const dias = parseInt(req.query.dias) || 7;
+        // 🏢 TODO: Agregar filtro por conjunto si no es superadmin
         const stats = await AuditLog.obtenerEstadisticas(dias);
         const rateLimitStatus = getRateLimitStatus();
         res.json({ ...stats, rateLimiting: rateLimitStatus });
@@ -188,13 +191,17 @@ app.get('/api/audit/ip/:ip', verificarToken, esAdmin, async (req, res) => {
 });
 
 // ========================================
-// 📌 Supervisión de Movimientos (solo admin)
+// 📌 Supervisión de Movimientos (solo admin) - MULTI-TENANT
 // ========================================
 app.get('/api/supervision/movimientos', verificarToken, esAdmin, async (req, res) => {
     try {
         const { rol, accion, fechaInicio, fechaFin, page, limit } = req.query;
 
+        // 🏢 MULTI-TENANT: SuperAdmin ve todos, otros solo de su conjunto
+        const conjuntoId = isSuperAdmin(req) ? null : getConjuntoId(req);
+
         const resultado = await AuditLog.obtenerMovimientosSupervision({
+            conjuntoId,  // 🏢 Filtro por conjunto
             rol,
             accion,
             fechaInicio,
@@ -213,13 +220,22 @@ app.get('/api/supervision/movimientos', verificarToken, esAdmin, async (req, res
     }
 });
 
-// Obtener detalle de un movimiento específico
+// 🏢 Obtener detalle de un movimiento específico - MULTI-TENANT
 app.get('/api/supervision/movimientos/:id', verificarToken, esAdmin, async (req, res) => {
     try {
         const movimiento = await AuditLog.findById(req.params.id).lean();
         if (!movimiento) {
             return res.status(404).json({ error: 'Movimiento no encontrado' });
         }
+
+        // 🏢 MULTI-TENANT: Verificar que el movimiento pertenece al conjunto del usuario
+        if (!isSuperAdmin(req)) {
+            const conjuntoId = getConjuntoId(req);
+            if (movimiento.conjunto && movimiento.conjunto.toString() !== conjuntoId) {
+                return res.status(403).json({ error: 'No tienes permisos para ver este movimiento' });
+            }
+        }
+
         res.json(movimiento);
     } catch (error) {
         res.status(500).json({ error: 'Error obteniendo detalle', mensaje: error.message });

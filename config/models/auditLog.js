@@ -106,8 +106,14 @@ auditLogSchema.statics.registrar = async function (datos) {
 };
 
 // Método estático para obtener logs recientes
-auditLogSchema.statics.obtenerRecientes = function (limite = 50) {
-    return this.find()
+// 🏢 MULTI-TENANT: Acepta conjuntoId para filtrar por conjunto
+auditLogSchema.statics.obtenerRecientes = function (limite = 50, conjuntoId = null) {
+    const query = {};
+    // Si se proporciona conjuntoId, filtrar por ese conjunto
+    if (conjuntoId) {
+        query.conjunto = conjuntoId;
+    }
+    return this.find(query)
         .sort({ fecha: -1 })
         .limit(limite)
         .lean();
@@ -159,8 +165,10 @@ auditLogSchema.statics.obtenerEstadisticas = async function (dias = 7) {
 };
 
 // Método estático para supervisión de movimientos (porteros y residentes)
+// 🏢 MULTI-TENANT: Acepta conjuntoId para filtrar por conjunto
 auditLogSchema.statics.obtenerMovimientosSupervision = async function (filtros = {}) {
     const {
+        conjuntoId,  // 🏢 Nuevo: filtro por conjunto
         rol,
         accion,
         fechaInicio,
@@ -178,6 +186,11 @@ auditLogSchema.statics.obtenerMovimientosSupervision = async function (filtros =
             ]
         }
     };
+
+    // 🏢 MULTI-TENANT: Filtrar por conjunto si se proporciona
+    if (conjuntoId) {
+        query.conjunto = conjuntoId;
+    }
 
     // Filtrar por rol específico (porteria o residente)
     if (rol && rol !== 'todos') {
