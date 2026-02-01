@@ -361,9 +361,15 @@ exports.refreshToken = async (req, res) => {
 };
 
 // Obtener todos los usuarios y visitantes (con paginación opcional)
+// 🏢 IMPORTANTE: Aplica filtrado multi-tenant para aislar datos por conjunto
 exports.obtenerUsuarios = async (req, res) => {
     try {
         const Visitante = require("../config/models/visitante");
+        const { getTenantFilter, isSuperAdmin } = require("../middlewares/auth.middleware");
+
+        // 🏢 Obtener filtro de tenant (conjunto)
+        // SuperAdmin ve todo, otros roles solo ven su conjunto
+        const tenantFilter = getTenantFilter(req);
 
         // Parámetros de paginación y búsqueda (opcionales)
         const page = parseInt(req.query.page) || 1;
@@ -371,8 +377,8 @@ exports.obtenerUsuarios = async (req, res) => {
         const search = req.query.search?.trim() || '';
         const rol = req.query.rol || 'todos';
 
-        // Construir query de búsqueda
-        let query = {};
+        // Construir query de búsqueda CON filtro de tenant
+        let query = { ...tenantFilter };
         if (search) {
             query.$or = [
                 { nombre: { $regex: search, $options: 'i' } },
@@ -380,21 +386,61 @@ exports.obtenerUsuarios = async (req, res) => {
                 { cedula: { $regex: search, $options: 'i' } },
                 { placaVehiculo: { $regex: search, $options: 'i' } }
             ];
+            // Si hay búsqueda Y filtro de tenant, necesitamos usar $and
+            if (tenantFilter.conjunto) {
+                query = {
+                    $and: [
+                        tenantFilter,
+                        {
+                            $or: [
+                                { nombre: { $regex: search, $options: 'i' } },
+                                { apellido: { $regex: search, $options: 'i' } },
+                                { cedula: { $regex: search, $options: 'i' } },
+                                { placaVehiculo: { $regex: search, $options: 'i' } }
+                            ]
+                        }
+                    ]
+                };
+            }
         }
         if (rol !== 'todos') {
-            query.rol = rol;
+            if (query.$and) {
+                query.$and.push({ rol });
+            } else {
+                query.rol = rol;
+            }
+        }
+
+        // Query para visitantes también con filtro de tenant
+        let visitantesFilter = { ...tenantFilter };
+        if (search) {
+            if (tenantFilter.conjunto) {
+                visitantesFilter = {
+                    $and: [
+                        tenantFilter,
+                        {
+                            $or: [
+                                { nombre: { $regex: search, $options: 'i' } },
+                                { apellido: { $regex: search, $options: 'i' } },
+                                { cedula: { $regex: search, $options: 'i' } },
+                                { placaVehiculo: { $regex: search, $options: 'i' } }
+                            ]
+                        }
+                    ]
+                };
+            } else {
+                visitantesFilter.$or = [
+                    { nombre: { $regex: search, $options: 'i' } },
+                    { apellido: { $regex: search, $options: 'i' } },
+                    { cedula: { $regex: search, $options: 'i' } },
+                    { placaVehiculo: { $regex: search, $options: 'i' } }
+                ];
+            }
         }
 
         // Usar Promise.all para queries paralelas y .lean() para mejor rendimiento
         let usuariosQuery = Usuario.find(query, '-password -__v');
-        let visitantesQuery = Visitante.find(search ? {
-            $or: [
-                { nombre: { $regex: search, $options: 'i' } },
-                { apellido: { $regex: search, $options: 'i' } },
-                { cedula: { $regex: search, $options: 'i' } },
-                { placaVehiculo: { $regex: search, $options: 'i' } }
-            ]
-        } : {}, '-__v');
+        let visitantesQuery = Visitante.find(visitantesFilter, '-__v');
 
         // Aplicar paginación si se especifica límite
         if (limit > 0) {
@@ -407,12 +453,7 @@ exports.obtenerUsuarios = async (req, res) => {
             usuariosQuery.lean(),
             visitantesQuery.lean(),
             Usuario.countDocuments(query),
-            Visitante.countDocuments(search ? {
-                $or: [
-                    { nombre: { $regex: search, $options: 'i' } },
-                    { cedula: { $regex: search, $options: 'i' } }
-                ]
-            } : {})
+            Visitante.countDocuments(visitantesFilter)
         ]);
 
         const residentes = usuarios.filter(u => u.rol === 'residente');
@@ -452,8 +493,11 @@ exports.obtenerUsuarios = async (req, res) => {
 };
 
 // Obtener usuario por ID
+// 🏢 Verifica que el usuario pertenezca al mismo conjunto
 exports.obtenerUsuarioPorId = async (req, res) => {
     try {
+        const { getTenantFilter, isSuperAdmin } = require("../middlewares/auth.middleware");
+
         if (req.params.id === "admin") {
             return res.json(ADMIN_INFO);
         }
@@ -461,6 +505,19 @@ exports.obtenerUsuarioPorId = async (req, res) => {
         const usuario = await Usuario.findById(req.params.id);
         if (!usuario) {
             return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // 🏢 Verificar que el usuario pertenezca al mismo conjunto (excepto SuperAdmin)
+        if (!isSuperAdmin(req)) {
+            const conjuntoUsuarioSolicitante = req.usuario?.conjuntoId;
+            const conjuntoUsuarioObjetivo = usuario.conjunto?.toString();
+
+            if (conjuntoUsuarioSolicitante && conjuntoUsuarioObjetivo &&
+                conjuntoUsuarioSolicitante !== conjuntoUsuarioObjetivo) {
+                return res.status(403).json({
+                    error: "No tienes permisos para ver este usuario"
+                });
+            }
         }
 
         res.json(usuario);
@@ -474,8 +531,10 @@ exports.obtenerUsuarioPorId = async (req, res) => {
 };
 
 // ✅ Actualizar usuario (corrige problema de borrar campos no enviados)
+// 🏢 Verifica que el usuario pertenezca al mismo conjunto
 exports.actualizarUsuario = async (req, res) => {
     try {
+        const { isSuperAdmin } = require("../middlewares/auth.middleware");
         const { id } = req.params;
         const datos = { ...req.body };
 
@@ -483,6 +542,19 @@ exports.actualizarUsuario = async (req, res) => {
         const usuarioAnterior = await Usuario.findById(id).lean();
         if (!usuarioAnterior) {
             return res.status(404).json({ error: "Usuario no encontrado" });
+        }
+
+        // 🏢 Verificar que el usuario pertenezca al mismo conjunto (excepto SuperAdmin)
+        if (!isSuperAdmin(req)) {
+            const conjuntoUsuarioSolicitante = req.usuario?.conjuntoId;
+            const conjuntoUsuarioObjetivo = usuarioAnterior.conjunto?.toString();
+
+            if (conjuntoUsuarioSolicitante && conjuntoUsuarioObjetivo &&
+                conjuntoUsuarioSolicitante !== conjuntoUsuarioObjetivo) {
+                return res.status(403).json({
+                    error: "No tienes permisos para modificar este usuario"
+                });
+            }
         }
 
         // Extraer info del ejecutor si viene
@@ -571,9 +643,11 @@ exports.actualizarUsuario = async (req, res) => {
 };
 
 // Eliminar usuario o visitante
+// 🏢 Verifica que el usuario pertenezca al mismo conjunto antes de eliminar
 exports.eliminarUsuario = async (req, res) => {
     try {
         const Visitante = require("../config/models/visitante");
+        const { isSuperAdmin } = require("../middlewares/auth.middleware");
         const { id, tipo } = req.params;
         const usuarioEjecutor = req.body?.ejecutadoPor || null;
 
@@ -584,21 +658,35 @@ exports.eliminarUsuario = async (req, res) => {
         let eliminado;
         let tipoRecurso = tipo === "visitante" ? "visitante" : "usuario";
 
-        // Obtener datos ANTES de eliminar para el log
+        // Obtener datos ANTES de eliminar para el log y verificación de tenant
         if (tipo === "visitante") {
             eliminado = await Visitante.findById(id).lean();
-            if (eliminado) {
-                await Visitante.findByIdAndDelete(id);
-            }
         } else {
             eliminado = await Usuario.findById(id).lean();
-            if (eliminado) {
-                await Usuario.findByIdAndDelete(id);
-            }
         }
 
         if (!eliminado) {
             return res.status(404).json({ error: "No encontrado" });
+        }
+
+        // 🏢 Verificar que el registro pertenezca al mismo conjunto (excepto SuperAdmin)
+        if (!isSuperAdmin(req)) {
+            const conjuntoUsuarioSolicitante = req.usuario?.conjuntoId;
+            const conjuntoRegistro = eliminado.conjunto?.toString();
+
+            if (conjuntoUsuarioSolicitante && conjuntoRegistro &&
+                conjuntoUsuarioSolicitante !== conjuntoRegistro) {
+                return res.status(403).json({
+                    error: `No tienes permisos para eliminar este ${tipoRecurso}`
+                });
+            }
+        }
+
+        // Ahora sí eliminar
+        if (tipo === "visitante") {
+            await Visitante.findByIdAndDelete(id);
+        } else {
+            await Usuario.findByIdAndDelete(id);
         }
 
         // Registrar en auditoría
