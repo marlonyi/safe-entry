@@ -153,38 +153,43 @@ exports.crearUsuario = async (req, res) => {
         // Registrar en auditoría - obtener info del usuario que ejecuta la acción
         const usuarioEjecutor = req.usuarioLogueado || req.body.ejecutadoPor || null;
         if (usuarioEjecutor) {
-            await AuditLog.registrar({
-                usuario: {
-                    id: usuarioEjecutor.id,
-                    cedula: usuarioEjecutor.cedula,
-                    nombre: usuarioEjecutor.nombre,
-                    rol: usuarioEjecutor.rol
-                },
-                accion: 'CREATE_USER',
-                descripcion: `Creó usuario: ${nombre} ${apellido} (${rol || 'residente'})`,
-                recurso: {
-                    tipo: 'usuario',
-                    id: nuevoUsuario._id.toString(),
-                    nombre: `${nombre} ${apellido}`,
-                    datosAnteriores: null,
-                    datosNuevos: {
-                        nombre,
-                        apellido,
-                        cedula,
-                        apartamento: nuevoUsuario.apartamento,
-                        torre: nuevoUsuario.torre,
-                        rol: nuevoUsuario.rol,
-                        placaVehiculo: nuevoUsuario.placaVehiculo
-                    }
-                },
-                requestInfo: {
-                    ip: req.ip || req.connection?.remoteAddress,
-                    userAgent: req.get('User-Agent'),
-                    method: req.method,
-                    path: req.originalUrl
-                },
-                resultado: 'SUCCESS'
-            });
+            try {
+                await AuditLog.registrar({
+                    usuario: {
+                        id: usuarioEjecutor.id,
+                        cedula: usuarioEjecutor.cedula,
+                        nombre: usuarioEjecutor.nombre,
+                        rol: usuarioEjecutor.rol
+                    },
+                    accion: 'CREATE_USER',
+                    descripcion: `Creó usuario: ${nombre} ${apellido} (${rol || 'residente'})`,
+                    recurso: {
+                        tipo: 'usuario',
+                        id: nuevoUsuario._id.toString(),
+                        nombre: `${nombre} ${apellido}`,
+                        datosAnteriores: null,
+                        datosNuevos: {
+                            nombre,
+                            apellido,
+                            cedula,
+                            apartamento: nuevoUsuario.apartamento,
+                            torre: nuevoUsuario.torre,
+                            rol: nuevoUsuario.rol,
+                            placaVehiculo: nuevoUsuario.placaVehiculo
+                        }
+                    },
+                    requestInfo: {
+                        ip: req.ip || req.connection?.remoteAddress,
+                        userAgent: req.get('User-Agent'),
+                        method: req.method,
+                        path: req.originalUrl
+                    },
+                    resultado: 'SUCCESS'
+                });
+            } catch (auditError) {
+                console.error("Error en auditoría (no crítico):", auditError.message);
+                // No lanzamos error para no afectar la creación del usuario
+            }
         }
 
         res.status(201).json({
