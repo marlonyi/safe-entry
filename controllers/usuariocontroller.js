@@ -868,6 +868,17 @@ exports.crearAdminRapido = async (req, res) => {
         const { conjuntoId, nombre, apellido, cedula, email } = req.body;
         const Conjunto = require("../config/models/conjunto");
 
+        // Validar que conjuntoId es válido
+        if (!conjuntoId) {
+            return res.status(400).json({ error: "El ID del conjunto es requerido" });
+        }
+
+        // Validar formato de ObjectId
+        const mongoose = require("mongoose");
+        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
+            return res.status(400).json({ error: "ID de conjunto inválido" });
+        }
+
         // Validar que el conjunto existe
         const conjunto = await Conjunto.findById(conjuntoId);
         if (!conjunto) {
