@@ -93,9 +93,25 @@ exports.crearUsuario = async (req, res) => {
             return res.status(400).json({ error: "No puedes registrar un usuario con esta cédula" });
         }
 
-        // 🏢 MULTI-TENANT: Verificar usuario existente considerando el conjunto
-        const { getConjuntoId } = require("../middlewares/auth.middleware");
-        const conjuntoDelCreador = getConjuntoId(req);
+        // 🏢 MULTI-TENANT: Determinar conjunto para el nuevo usuario
+        const { getConjuntoId, isSuperAdmin } = require("../middlewares/auth.middleware");
+
+        // Prioridad: 1) conjuntoId del body (SuperAdmin), 2) conjunto del creador
+        let conjuntoDelCreador = req.body.conjuntoId || getConjuntoId(req);
+
+        // Validar que haya un conjunto válido
+        if (!conjuntoDelCreador) {
+            // SuperAdmin DEBE proporcionar conjuntoId
+            if (isSuperAdmin(req)) {
+                return res.status(400).json({
+                    error: "SuperAdmin debe especificar el conjuntoId al crear usuarios"
+                });
+            }
+            // Admin/Portero sin conjunto asignado
+            return res.status(400).json({
+                error: "No tienes un conjunto asignado. Contacta al SuperAdmin."
+            });
+        }
 
         // Buscar si ya existe un usuario con esa cédula EN EL MISMO CONJUNTO
         const usuarioExistente = await Usuario.findOne({
