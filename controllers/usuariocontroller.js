@@ -93,9 +93,17 @@ exports.crearUsuario = async (req, res) => {
             return res.status(400).json({ error: "No puedes registrar un usuario con esta cédula" });
         }
 
-        const usuarioExistente = await Usuario.findOne({ cedula });
+        // 🏢 MULTI-TENANT: Verificar usuario existente considerando el conjunto
+        const { getConjuntoId } = require("../middlewares/auth.middleware");
+        const conjuntoDelCreador = getConjuntoId(req);
+
+        // Buscar si ya existe un usuario con esa cédula EN EL MISMO CONJUNTO
+        const usuarioExistente = await Usuario.findOne({
+            cedula,
+            conjunto: conjuntoDelCreador
+        });
         if (usuarioExistente) {
-            return res.status(400).json({ error: "El usuario ya existe" });
+            return res.status(400).json({ error: "El usuario ya existe en este conjunto" });
         }
 
         tieneVehiculo = tieneVehiculo === "Si" || tieneVehiculo === true;
@@ -109,6 +117,7 @@ exports.crearUsuario = async (req, res) => {
         // Para porteros, apartamento y torre pueden estar vacíos
         // Para otros roles, usamos valores por defecto si no vienen
         const nuevoUsuario = new Usuario({
+            conjunto: conjuntoDelCreador, // 🏢 Asignar al mismo conjunto del creador
             nombre,
             apellido,
             cedula,
