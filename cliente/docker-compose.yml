@@ -1,0 +1,95 @@
+# ================================
+# Admin Residencial - Docker Compose para CLIENTE
+# ================================
+# Este archivo usa imágenes pre-construidas de Docker Hub
+# El cliente NO tiene acceso al código fuente
+#
+# Uso: docker-compose -f docker-compose-cliente.yml up -d
+
+version: '3.8'
+
+services:
+  # ================================
+  # Aplicación Node.js (imagen pre-construida)
+  # ================================
+  app:
+    image: adminresidencial/app:latest
+    container_name: admin-residencial-app
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    env_file:
+      - .env.local
+    environment:
+      - NODE_ENV=production
+      - PORT=5000
+      - MONGO_URI=mongodb://mongodb:27017/adminResidencial
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    volumes:
+      - app-logs:/app/logs
+    networks:
+      - admin-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:5000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # ================================
+  # MongoDB Local
+  # ================================
+  mongodb:
+    image: mongo:6
+    container_name: admin-residencial-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb-data:/data/db
+      - mongodb-backup:/backup
+    networks:
+      - admin-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ================================
+  # Reconocimiento de Placas (imagen pre-construida)
+  # ================================
+  plate-recognition:
+    image: adminresidencial/plate-recognition:latest
+    container_name: admin-residencial-plates
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - API_URL=http://app:5000/api
+    networks:
+      - admin-network
+    depends_on:
+      app:
+        condition: service_healthy
+
+# ================================
+# Redes
+# ================================
+networks:
+  admin-network:
+    driver: bridge
+
+# ================================
+# Volúmenes persistentes
+# ================================
+volumes:
+  mongodb-data:
+    name: admin-residencial-mongodb-data
+  mongodb-backup:
+    name: admin-residencial-mongodb-backup
+  app-logs:
+    name: admin-residencial-logs
