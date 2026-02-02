@@ -13,7 +13,7 @@ services:
   # Aplicación Node.js (imagen pre-construida)
   # ================================
   app:
-    image: adminresidencial/app:latest
+    image: fegama1206/adminresidencial:latest
     container_name: admin-residencial-app
     restart: unless-stopped
     ports:
@@ -63,7 +63,7 @@ services:
   # Reconocimiento de Placas (imagen pre-construida)
   # ================================
   plate-recognition:
-    image: adminresidencial/plate-recognition:latest
+    image: fegama1206/plate-recognition:latest
     container_name: admin-residencial-plates
     restart: unless-stopped
     env_file:

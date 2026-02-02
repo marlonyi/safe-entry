@@ -11,9 +11,9 @@ echo ║  para distribuir a clientes SIN código fuente               ║
 echo ╚══════════════════════════════════════════════════════════════╝
 echo.
 
-:: Configuración - CAMBIAR ESTOS VALORES
-set DOCKER_USERNAME=adminresidencial
-set APP_IMAGE=%DOCKER_USERNAME%/app
+:: Configuración - Tu usuario de Docker Hub
+set DOCKER_USERNAME=fegama1206
+set APP_IMAGE=%DOCKER_USERNAME%/adminresidencial
 set PLATE_IMAGE=%DOCKER_USERNAME%/plate-recognition
 set VERSION=latest
 
