@@ -21,18 +21,19 @@ set VERSION=latest
 echo ⚠️  IMPORTANTE: Asegúrese de haber iniciado sesión en Docker Hub
 echo    Ejecute: docker login
 echo.
+echo Presione una tecla cuando haya iniciado sesión...
 pause
 
-:: Verificar login
-docker info | findstr "Username" >nul 2>&1
+:: Verificar que Docker está corriendo
+docker ps >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
-    echo ❌ No ha iniciado sesión en Docker Hub.
-    echo    Ejecute: docker login
+    echo ❌ Docker no está corriendo. Abra Docker Desktop y espere.
     echo.
     pause
     exit /b 1
 )
+echo ✅ Docker está corriendo. Continuando...
 
 echo.
 echo [1/6] Construyendo imagen de la aplicación Node.js...
