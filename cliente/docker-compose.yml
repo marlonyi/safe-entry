@@ -76,6 +76,23 @@ services:
       app:
         condition: service_healthy
 
+  # ================================
+  # Escáner QR (imagen pre-construida)
+  # ================================
+  qr-scanner:
+    image: fegama1206/qr-scanner:latest
+    container_name: admin-residencial-qr
+    restart: unless-stopped
+    env_file:
+      - .env.local
+    environment:
+      - API_URL=http://app:5000/api
+    networks:
+      - admin-network
+    depends_on:
+      app:
+        condition: service_healthy
+
 # ================================
 # Redes
 # ================================
