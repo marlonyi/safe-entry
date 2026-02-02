@@ -1,0 +1,35 @@
+# ================================
+# Admin Residencial - Reconocimiento de Placas
+# Dockerfile para instalación local
+# ================================
+
+FROM python:3.10-slim
+
+# Instalar dependencias del sistema
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    wget \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copiar requirements primero (para cache de Docker)
+COPY requirements.txt .
+
+# Instalar dependencias Python
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código fuente
+COPY . .
+
+# Variables de entorno por defecto
+ENV PYTHONUNBUFFERED=1
+ENV API_URL=http://app:5000/api
+
+# Comando de inicio
+CMD ["python", "Placascolombianas.py"]
