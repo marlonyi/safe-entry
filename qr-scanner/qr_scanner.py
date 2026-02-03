@@ -33,13 +33,40 @@ if sys.stdout is not None and hasattr(sys.stdout, 'buffer'):
 # Archivo para guardar sesión
 SESSION_FILE = os.path.join(os.path.dirname(__file__), ".session.json")
 
-# Configuración de cámaras (desde .env o defaults)
-CAMERA_CONFIG = [
-    {"index": int(os.getenv("CAMERA_0", 0)), "nombre": "Entrada 1 - Ingreso", "modo": "entrada"},
-    {"index": int(os.getenv("CAMERA_1", 1)), "nombre": "Entrada 1 - Salida", "modo": "salida"},
-    {"index": int(os.getenv("CAMERA_2", 2)), "nombre": "Entrada 2 - Ingreso", "modo": "entrada"},
-    {"index": int(os.getenv("CAMERA_3", 3)), "nombre": "Entrada 2 - Salida", "modo": "salida"},
+# Archivo para guardar configuración de cámaras
+CAMERA_CONFIG_FILE = os.path.join(os.path.dirname(__file__), ".camera_config.json")
+
+# Configuración por defecto de cámaras
+DEFAULT_CAMERA_CONFIG = [
+    {"index": 0, "nombre": "Cámara 1", "modo": "entrada"},
+    {"index": 1, "nombre": "Cámara 2", "modo": "salida"},
+    {"index": 2, "nombre": "Cámara 3", "modo": "entrada"},
+    {"index": 3, "nombre": "Cámara 4", "modo": "salida"},
 ]
+
+def load_camera_config():
+    """Cargar configuración de cámaras desde archivo"""
+    if os.path.exists(CAMERA_CONFIG_FILE):
+        try:
+            with open(CAMERA_CONFIG_FILE, "r") as f:
+                config = json.load(f)
+                return config.get("cameras", DEFAULT_CAMERA_CONFIG)
+        except:
+            pass
+    return DEFAULT_CAMERA_CONFIG.copy()
+
+def save_camera_config(cameras):
+    """Guardar configuración de cámaras a archivo"""
+    try:
+        with open(CAMERA_CONFIG_FILE, "w") as f:
+            json.dump({"cameras": cameras}, f, indent=2)
+        return True
+    except Exception as e:
+        print(f"Error guardando config: {e}")
+        return False
+
+# Cargar configuración
+CAMERA_CONFIG = load_camera_config()
 
 # Número de cámaras a usar (puede ser 1, 2 o 4)
 NUM_CAMERAS = int(os.getenv("NUM_CAMERAS", 4))
@@ -527,6 +554,11 @@ class MultiCameraApp:
                                        fg_color="gray", state="disabled")
         self.stop_btn.pack(fill="x", pady=5)
         
+        # Botón de configuración de cámaras
+        ctk.CTkButton(btn_frame, text="⚙️ Configurar Cámaras",
+                      command=self.show_camera_config_dialog, height=35,
+                      fg_color="#2d3748").pack(fill="x", pady=5)
+        
         ctk.CTkButton(btn_frame, text="🚪 Cerrar Sesión",
                       command=self.logout, height=35, 
                       fg_color="#8b0000").pack(fill="x", pady=(20, 5))
@@ -576,6 +608,102 @@ class MultiCameraApp:
         
         self.start_btn.configure(state="normal")
         self.stop_btn.configure(state="disabled", fg_color="gray")
+    
+    def show_camera_config_dialog(self):
+        """Mostrar diálogo de configuración de cámaras"""
+        global CAMERA_CONFIG
+        
+        # Detener cámaras primero
+        if self.running:
+            self.stop_cameras()
+        
+        # Crear ventana de diálogo
+        dialog = ctk.CTkToplevel(self.root)
+        dialog.title("⚙️ Configurar Cámaras")
+        dialog.geometry("500x450")
+        dialog.transient(self.root)
+        dialog.grab_set()
+        
+        # Centrar
+        dialog.update_idletasks()
+        x = self.root.winfo_x() + (self.root.winfo_width() - 500) // 2
+        y = self.root.winfo_y() + (self.root.winfo_height() - 450) // 2
+        dialog.geometry(f"+{x}+{y}")
+        
+        # Título
+        ctk.CTkLabel(dialog, text="⚙️ Configuración de Cámaras", 
+                     font=("Helvetica", 18, "bold")).pack(pady=(20, 10))
+        
+        ctk.CTkLabel(dialog, text="Selecciona el índice y modo de cada cámara", 
+                     font=("Helvetica", 12), text_color="gray").pack(pady=(0, 20))
+        
+        # Variables para almacenar selecciones
+        index_vars = []
+        mode_vars = []
+        name_vars = []
+        
+        # Frame para cámaras
+        cameras_frame = ctk.CTkFrame(dialog)
+        cameras_frame.pack(fill="both", expand=True, padx=20, pady=10)
+        
+        for i in range(NUM_CAMERAS):
+            config = CAMERA_CONFIG[i] if i < len(CAMERA_CONFIG) else {"index": i, "nombre": f"Cámara {i+1}", "modo": "entrada"}
+            
+            row_frame = ctk.CTkFrame(cameras_frame, fg_color="transparent")
+            row_frame.pack(fill="x", pady=8, padx=10)
+            
+            # Nombre editable
+            name_var = ctk.StringVar(value=config.get("nombre", f"Cámara {i+1}"))
+            name_vars.append(name_var)
+            
+            ctk.CTkLabel(row_frame, text=f"📹 Slot {i+1}:", font=("Helvetica", 11, "bold"), width=70).pack(side="left")
+            
+            name_entry = ctk.CTkEntry(row_frame, textvariable=name_var, width=120, placeholder_text="Nombre")
+            name_entry.pack(side="left", padx=5)
+            
+            # Índice de cámara
+            idx_var = ctk.IntVar(value=config.get("index", i))
+            index_vars.append(idx_var)
+            
+            ctk.CTkLabel(row_frame, text="Índice:", font=("Helvetica", 10)).pack(side="left", padx=(10, 5))
+            idx_menu = ctk.CTkOptionMenu(row_frame, variable=idx_var, values=["0", "1", "2", "3", "4", "5"], 
+                                          width=60, command=lambda v, var=idx_var: var.set(int(v)))
+            idx_menu.set(str(config.get("index", i)))
+            idx_menu.pack(side="left")
+            
+            # Modo entrada/salida
+            mode_var = ctk.StringVar(value=config.get("modo", "entrada"))
+            mode_vars.append(mode_var)
+            
+            ctk.CTkLabel(row_frame, text="Modo:", font=("Helvetica", 10)).pack(side="left", padx=(10, 5))
+            mode_menu = ctk.CTkOptionMenu(row_frame, variable=mode_var, values=["entrada", "salida"], width=90)
+            mode_menu.pack(side="left")
+        
+        # Botones
+        btn_frame = ctk.CTkFrame(dialog, fg_color="transparent")
+        btn_frame.pack(pady=20)
+        
+        def save_config():
+            global CAMERA_CONFIG
+            new_config = []
+            for i in range(NUM_CAMERAS):
+                new_config.append({
+                    "index": int(index_vars[i].get()),
+                    "nombre": name_vars[i].get(),
+                    "modo": mode_vars[i].get()
+                })
+            
+            CAMERA_CONFIG = new_config
+            save_camera_config(new_config)
+            dialog.destroy()
+            
+            # Refrescar pantalla para mostrar nuevos nombres
+            self.show_scanner_screen()
+        
+        ctk.CTkButton(btn_frame, text="💾 Guardar", command=save_config, 
+                      width=120, height=40, fg_color="#2d5a27").pack(side="left", padx=10)
+        ctk.CTkButton(btn_frame, text="❌ Cancelar", command=dialog.destroy, 
+                      width=120, height=40, fg_color="#8b0000").pack(side="left", padx=10)
     
     def update_camera_frames(self):
         """Actualizar frames en la UI"""
