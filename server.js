@@ -30,10 +30,30 @@ if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'secr
 // ========================================
 // 📌 Configuración de CORS
 // ========================================
+
+// Función para detectar si un origen es una IP privada (on-premise)
+function isPrivateIP(origin) {
+    if (!origin) return false;
+    const url = origin.replace(/^https?:\/\//, '').split(':')[0];
+    return url === 'localhost' ||
+        url === '127.0.0.1' ||
+        url.startsWith('192.168.') ||
+        url.startsWith('10.') ||
+        url.startsWith('172.16.') || url.startsWith('172.17.') ||
+        url.startsWith('172.18.') || url.startsWith('172.19.') ||
+        url.startsWith('172.2') || url.startsWith('172.30.') || url.startsWith('172.31.');
+}
+
 const corsOptions = {
     origin: function (origin, callback) {
         // Permitir requests sin origin (apps móviles, Postman, etc)
         if (!origin) return callback(null, true);
+
+        // Permitir cualquier IP privada (on-premise / desarrollo local)
+        if (isPrivateIP(origin)) {
+            console.log(`✅ CORS permitió origen local/on-premise: ${origin}`);
+            return callback(null, true);
+        }
 
         const allowedOrigins = [
             'http://localhost:5000',
