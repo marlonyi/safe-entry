@@ -3,6 +3,7 @@ const router = express.Router();
 const Instalacion = require("../config/models/Instalacion");
 const Usuario = require("../config/models/usuario");
 const Parqueadero = require("../config/models/parqueadero");
+const { verificarToken, esSuperAdmin } = require("../middlewares/auth.middleware");
 
 // ========================================
 // 📡 ENDPOINTS PARA INSTALACIONES ON-PREMISE
@@ -66,35 +67,11 @@ router.post("/heartbeat", async (req, res) => {
 // 📊 ENDPOINTS PARA SUPERADMIN
 // ========================================
 
-// Middleware para verificar superadmin
-const verificarSuperAdmin = async (req, res, next) => {
-    try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) {
-            return res.status(401).json({ error: "Token no proporcionado" });
-        }
-
-        const token = authHeader.split(" ")[1];
-        const jwt = require("jsonwebtoken");
-        const decoded = jwt.verify(token, process.env.JWT_SECRET);
-
-        const usuario = await Usuario.findById(decoded.id);
-        if (!usuario || usuario.rol !== "superadmin") {
-            return res.status(403).json({ error: "Acceso denegado - Solo SuperAdmin" });
-        }
-
-        req.usuario = usuario;
-        next();
-    } catch (error) {
-        res.status(401).json({ error: "Token inválido" });
-    }
-};
-
 /**
  * GET /api/telemetria/instalaciones
  * Listar todas las instalaciones (SuperAdmin)
  */
-router.get("/instalaciones", verificarSuperAdmin, async (req, res) => {
+router.get("/instalaciones", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const instalaciones = await Instalacion.find()
             .select("-historialHeartbeats") // Excluir historial pesado
@@ -117,7 +94,7 @@ router.get("/instalaciones", verificarSuperAdmin, async (req, res) => {
  * GET /api/telemetria/instalaciones/:id
  * Obtener detalle de una instalación (incluye historial)
  */
-router.get("/instalaciones/:id", verificarSuperAdmin, async (req, res) => {
+router.get("/instalaciones/:id", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const instalacion = await Instalacion.findOne({
             instalacionId: req.params.id
@@ -140,7 +117,7 @@ router.get("/instalaciones/:id", verificarSuperAdmin, async (req, res) => {
  * PUT /api/telemetria/instalaciones/:id/config
  * Actualizar configuración remota de una instalación
  */
-router.put("/instalaciones/:id/config", verificarSuperAdmin, async (req, res) => {
+router.put("/instalaciones/:id/config", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const { configuracion, notas, cliente } = req.body;
 
@@ -185,7 +162,7 @@ router.put("/instalaciones/:id/config", verificarSuperAdmin, async (req, res) =>
  * PUT /api/telemetria/instalaciones/:id/estado
  * Activar/desactivar instalación
  */
-router.put("/instalaciones/:id/estado", verificarSuperAdmin, async (req, res) => {
+router.put("/instalaciones/:id/estado", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const { activa } = req.body;
 
@@ -212,7 +189,7 @@ router.put("/instalaciones/:id/estado", verificarSuperAdmin, async (req, res) =>
  * DELETE /api/telemetria/instalaciones/:id
  * Eliminar una instalación
  */
-router.delete("/instalaciones/:id", verificarSuperAdmin, async (req, res) => {
+router.delete("/instalaciones/:id", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const instalacion = await Instalacion.findOneAndDelete({
             instalacionId: req.params.id
@@ -232,7 +209,7 @@ router.delete("/instalaciones/:id", verificarSuperAdmin, async (req, res) => {
  * GET /api/telemetria/estadisticas
  * Estadísticas globales de todas las instalaciones
  */
-router.get("/estadisticas", verificarSuperAdmin, async (req, res) => {
+router.get("/estadisticas", verificarToken, esSuperAdmin, async (req, res) => {
     try {
         const instalaciones = await Instalacion.find();
 
