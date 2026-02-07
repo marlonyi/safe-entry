@@ -123,11 +123,20 @@ InstalacionSchema.methods.actualizarDesdeHeartbeat = function (datos) {
     this.version = datos.version || this.version;
 
     if (datos.stats) {
-        this.stats = { ...this.stats, ...datos.stats };
+        // Actualizar cada subdocumento explícitamente
+        if (datos.stats.usuarios) {
+            this.stats.usuarios = { ...this.stats.usuarios.toObject?.() || this.stats.usuarios, ...datos.stats.usuarios };
+        }
+        if (datos.stats.plazas) {
+            this.stats.plazas = { ...this.stats.plazas.toObject?.() || this.stats.plazas, ...datos.stats.plazas };
+        }
+        if (datos.stats.accesos) {
+            this.stats.accesos = { ...this.stats.accesos.toObject?.() || this.stats.accesos, ...datos.stats.accesos };
+        }
     }
 
     if (datos.salud) {
-        this.salud = { ...this.salud, ...datos.salud };
+        this.salud = { ...this.salud.toObject?.() || this.salud, ...datos.salud };
     }
 
     if (datos.ipPublica) {

@@ -13,7 +13,7 @@ services:
   # Aplicación Node.js (imagen pre-construida)
   # ================================
   app:
-    image: fegama1206/adminresidencial:latest
+    image: fegama1206/admin-residencial:latest
     container_name: admin-residencial-app
     restart: unless-stopped
     ports:
