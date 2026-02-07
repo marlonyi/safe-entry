@@ -132,6 +132,7 @@ app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/visitantes', visitanteRoutes);
 app.use('/api/parqueaderos', parqueaderoRoutes);
 app.use('/api/conjuntos', conjuntoRoutes); // 🏢 Rutas de gestión de conjuntos (multi-tenant)
+app.use('/api/telemetria', require('./routes/telemetria.routes')); // 📡 Telemetría on-premise
 
 // ========================================
 // 💓 Health Check (para monitoreo)
@@ -354,4 +355,120 @@ app.listen(port, () => {
     logger.info(`🚀 Servidor corriendo en http://localhost:${port}`);
     logger.info(`📍 Entorno: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`🔗 API URL: http://localhost:${port}/api`);
+
+    // 📡 Sistema de Heartbeat para instalaciones on-premise
+    iniciarHeartbeat();
 });
+
+// ========================================
+// 📡 Sistema de Heartbeat (On-Premise → Azure)
+// ========================================
+async function iniciarHeartbeat() {
+    const AZURE_URL = process.env.AZURE_URL || 'https://safe-entry-fff6afd0gje3drcq.chilecentral-01.azurewebsites.net';
+    const INSTALACION_ID = process.env.INSTALACION_ID;
+    const NOMBRE_INSTALACION = process.env.NOMBRE_INSTALACION || 'Instalación Sin Nombre';
+    const HEARTBEAT_INTERVALO = parseInt(process.env.HEARTBEAT_INTERVALO) || 300000; // 5 minutos
+
+    // Solo activar heartbeat si hay un ID de instalación configurado
+    // (esto significa que es una instalación on-premise, no Azure mismo)
+    if (!INSTALACION_ID) {
+        logger.info('📡 Heartbeat desactivado (no hay INSTALACION_ID configurado)');
+        return;
+    }
+
+    logger.info(`📡 Heartbeat activado - Reportando a ${AZURE_URL} cada ${HEARTBEAT_INTERVALO / 1000}s`);
+
+    const axios = require('axios');
+    const Usuario = require('./config/models/usuario');
+    const Parqueadero = require('./config/models/parqueadero');
+    const HistorialAcceso = require('./config/models/historialAcceso');
+    const os = require('os');
+
+    async function enviarHeartbeat() {
+        try {
+            // Recopilar estadísticas
+            const usuarios = await Usuario.aggregate([
+                { $group: { _id: "$rol", count: { $sum: 1 } } }
+            ]);
+
+            const usuariosStats = { residentes: 0, porteros: 0, admins: 0, total: 0 };
+            usuarios.forEach(u => {
+                if (u._id === 'residente') usuariosStats.residentes = u.count;
+                else if (u._id === 'porteria') usuariosStats.porteros = u.count;
+                else if (u._id === 'admin') usuariosStats.admins = u.count;
+                usuariosStats.total += u.count;
+            });
+
+            // Estadísticas de parqueaderos
+            const plazas = await Parqueadero.find();
+            const plazasStats = {
+                total: plazas.length,
+                ocupadas: plazas.filter(p => p.estado === 'OCUPADO').length,
+                libres: plazas.filter(p => p.estado === 'LIBRE').length,
+                enEspera: plazas.filter(p => p.estado === 'EN_ESPERA').length
+            };
+
+            // Estadísticas de accesos
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const inicioSemana = new Date(hoy);
+            inicioSemana.setDate(inicioSemana.getDate() - 7);
+            const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+
+            let accesosStats = { hoy: 0, semana: 0, mes: 0 };
+            try {
+                accesosStats.hoy = await HistorialAcceso.countDocuments({ fecha: { $gte: hoy } });
+                accesosStats.semana = await HistorialAcceso.countDocuments({ fecha: { $gte: inicioSemana } });
+                accesosStats.mes = await HistorialAcceso.countDocuments({ fecha: { $gte: inicioMes } });
+            } catch (e) {
+                // HistorialAcceso podría no existir
+            }
+
+            // Estado de salud
+            const mongoose = require('mongoose');
+            const memUsage = process.memoryUsage();
+            const totalMem = os.totalmem();
+            const freeMem = os.freemem();
+
+            const salud = {
+                mongodb: mongoose.connection.readyState === 1 ? 'ok' : 'error',
+                uptime: Math.floor(process.uptime()),
+                memoria: `${Math.round((memUsage.heapUsed / memUsage.heapTotal) * 100)}%`,
+                sistemaMemoria: `${Math.round(((totalMem - freeMem) / totalMem) * 100)}%`,
+                cpu: `${os.loadavg()[0].toFixed(2)}`
+            };
+
+            // Enviar heartbeat
+            const response = await axios.post(`${AZURE_URL}/api/telemetria/heartbeat`, {
+                instalacionId: INSTALACION_ID,
+                nombre: NOMBRE_INSTALACION,
+                version: process.env.APP_VERSION || '1.0.0',
+                stats: {
+                    usuarios: usuariosStats,
+                    plazas: plazasStats,
+                    accesos: accesosStats
+                },
+                salud
+            }, { timeout: 10000 });
+
+            // Procesar configuración remota si la hay
+            if (response.data.configuracion) {
+                // Aquí podrías aplicar configuraciones remotas
+                if (response.data.mensaje) {
+                    logger.info(`📬 Mensaje de Azure: ${response.data.mensaje}`);
+                }
+            }
+
+            logger.info('📡 Heartbeat enviado correctamente');
+
+        } catch (error) {
+            logger.warn(`⚠️ Error enviando heartbeat: ${error.message}`);
+        }
+    }
+
+    // Enviar primer heartbeat después de 30 segundos
+    setTimeout(enviarHeartbeat, 30000);
+
+    // Continuar enviando periódicamente
+    setInterval(enviarHeartbeat, HEARTBEAT_INTERVALO);
+}
