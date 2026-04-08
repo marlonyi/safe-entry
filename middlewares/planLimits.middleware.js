@@ -3,10 +3,10 @@
  * Valida que no se excedan los límites según el plan del conjunto
  */
 
-const Usuario = require("../config/models/usuario");
-const Visitante = require("../config/models/visitante");
-const Parqueadero = require("../config/models/parqueadero");
-const Conjunto = require("../config/models/conjunto");
+const Usuario = require("../models/usuario");
+const Visitante = require("../models/visitante");
+const Parqueadero = require("../models/parqueadero");
+const Conjunto = require("../models/conjunto");
 
 // Límites por defecto según tipo de plan
 const LIMITES_POR_PLAN = {

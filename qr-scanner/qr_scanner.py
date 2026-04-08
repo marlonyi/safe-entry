@@ -332,7 +332,7 @@ class MultiCameraApp:
                     error = response.json().get("error", "Credenciales inválidas")
                     self.root.after(0, lambda: self.show_login_error(error))
             except Exception as e:
-                self.root.after(0, lambda: self.show_login_error(f"Error: {e}"))
+                self.root.after(0, lambda e=e: self.show_login_error(f"Error: {e}"))
         
         threading.Thread(target=attempt, daemon=True).start()
     

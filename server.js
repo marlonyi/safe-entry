@@ -4,17 +4,28 @@ const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet'); // 🛡️ Headers de seguridad HTTP
 const compression = require('compression'); // 📦 Compresión gzip de respuestas
-const conectarDB = require('./config/database');
-const logger = require('./config/logger'); // 📝 Sistema de logging
-const usuarioRoutes = require('./routes/usuario.routes');
-const visitanteRoutes = require('./routes/visitante.routes');
-const parqueaderoRoutes = require('./routes/parqueadero.routes');
-const conjuntoRoutes = require('./routes/conjunto.routes'); // 🏢 Multi-tenant
-const Conjunto = require('./config/models/conjunto'); // 🏢 Modelo de conjuntos
-const Usuario = require('./config/models/usuario');
+
+// ========================================
+// 📌 Imports desde nueva estructura modular
+// ========================================
+const { config, logger, middlewares, models } = require('./src');
+const conectarDB = config.database;
+const cache = config.cache;
+
+// Modelos
+const { Usuario, Conjunto, Parqueadero, HistorialAcceso, AuditLog } = models;
+
+// Middlewares
+const { rateLimiter } = middlewares.rateLimit;
+const { verificarToken, esAdmin, getConjuntoId, isSuperAdmin } = middlewares.auth;
+const { getRateLimitStatus } = middlewares.rateLimit;
+
+// Rutas (aún en ubicación original por ahora)
+const usuarioRoutes = require('./src/modules/usuarios/usuario.routes');
+const visitanteRoutes = require('./src/modules/visitantes/visitante.routes');
+const parqueaderoRoutes = require('./src/modules/parqueaderos/parqueadero.routes');
+const conjuntoRoutes = require('./src/modules/conjuntos/conjunto.routes');
 const bcrypt = require('bcryptjs');
-const { rateLimiter } = require('./middlewares/rateLimit.middleware');
-const AuditLog = require('./config/models/auditLog');
 
 const app = express();
 const port = process.env.PORT || 5000;
@@ -57,6 +68,8 @@ const corsOptions = {
 
         const allowedOrigins = [
             'http://localhost:5000',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
             'http://localhost:3000',
             'http://127.0.0.1:5000',
             'http://127.0.0.1:3000',
@@ -132,7 +145,9 @@ app.use('/api/usuarios', usuarioRoutes);
 app.use('/api/visitantes', visitanteRoutes);
 app.use('/api/parqueaderos', parqueaderoRoutes);
 app.use('/api/conjuntos', conjuntoRoutes); // 🏢 Rutas de gestión de conjuntos (multi-tenant)
-app.use('/api/telemetria', require('./routes/telemetria.routes')); // 📡 Telemetría on-premise
+app.use('/api/telemetria', require('./src/modules/telemetria/telemetria.routes'));
+app.use('/api/scripts', require('./src/modules/telemetria/scripts.routes')); // 📡 Telemetría on-premise
+app.use('/api/chat', require('./src/modules/chatbot/chatbot.routes')); // 🤖 Chatbot Groq AI
 
 // ========================================
 // 💓 Health Check (para monitoreo)
@@ -153,9 +168,6 @@ app.get('/api/health', async (req, res) => {
 // ========================================
 // 📌 Rutas de Auditoría y Seguridad
 // ========================================
-const { getRateLimitStatus } = require('./middlewares/rateLimit.middleware');
-const { verificarToken, esAdmin, getConjuntoId, isSuperAdmin } = require('./middlewares/auth.middleware');
-const cache = require('./config/cache');
 
 // Obtener estadísticas del cache (solo admin)
 app.get('/api/cache/stats', verificarToken, esAdmin, (req, res) => {
@@ -265,27 +277,7 @@ app.get('/api/supervision/movimientos/:id', verificarToken, esAdmin, async (req,
 
 // ========================================
 // 📌 Archivos estáticos (Frontend)
-// ========================================
-app.use(express.static(path.join(__dirname, 'Vista')));
 
-// ========================================
-// 📌 Rutas de vistas
-// ========================================
-app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'LandingPage', 'Landing.html')));
-app.get('/login', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vista.html')));
-app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaadmin.html')));
-app.get('/residente', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaresidente.html')));
-app.get('/porteria', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaporteria.html')));
-app.get('/porteriaactualizar', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaporteriaactualizar.html')));
-app.get('/porteriaregistrar', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'Vistaporteriaregistrar.html')));
-app.get('/mapa', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'mapa.html')));
-app.get('/hola', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'holamundo.html')));
-// 🏢 Vista SuperAdmin (multi-tenant)
-app.get('/superadmin', (req, res) => res.sendFile(path.join(__dirname, 'Vista', 'VistaSuperadmin.html')));
-
-// ========================================
-// 📌 Crear usuario admin si no existe
-// ========================================
 async function crearAdminSiNoExiste() {
     try {
         const superadminCedula = process.env.SUPERADMIN_CEDULA || process.env.ADMIN_CEDULA || "123456789";
@@ -379,9 +371,6 @@ async function iniciarHeartbeat() {
     logger.info(`📡 Heartbeat activado - Reportando a ${AZURE_URL} cada ${HEARTBEAT_INTERVALO / 1000}s`);
 
     const axios = require('axios');
-    const Usuario = require('./config/models/usuario');
-    const Parqueadero = require('./config/models/parqueadero');
-    const HistorialAcceso = require('./config/models/historialAcceso');
     const os = require('os');
 
     async function enviarHeartbeat() {

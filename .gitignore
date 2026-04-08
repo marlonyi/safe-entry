@@ -1,52 +1,45 @@
-# Dependencies
+# Node modules e info
 node_modules/
 package-lock.json
 
-# Environment variables (IMPORTANT - contains secrets)
+# Variables de entorno
 .env
-.env.local
-.env.production
-.env.*.local
+.env.*
 
 # Logs
 logs/
 *.log
-npm-debug.log*
 
-# OS files
+# Sistema Operativo
 .DS_Store
 Thumbs.db
 desktop.ini
 
-# IDE
+# IDEs
 .vscode/
 .idea/
-*.swp
-*.swo
 
 # Python
 __pycache__/
 *.py[cod]
-*$py.class
+*.class
 *.so
-.Python
 venv/
 ENV/
-.env.bak/
+.venv/
+env/
 
-# Build outputs
+# Modelos de Machine Learning e Imágenes
+*.pt
+*.arff
+*.onnx
+yolov8n.pt
+
+# Builds y temporales
 dist/
 build/
-*.egg-info/
-
-# Temporary files
 tmp/
 temp/
-*.tmp
 
-# Test coverage
-coverage/
-.nyc_output/
-
-# Uploads (if any)
+# Uploads
 uploads/

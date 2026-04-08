@@ -3,7 +3,7 @@
  * Facilita el registro de logs en controladores
  */
 
-const AuditLog = require('../config/models/auditLog');
+const AuditLog = require('../models/auditLog');
 
 /**
  * Extrae información de la request para el log
