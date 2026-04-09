@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Car, QrCode, Plus, Share2, Shield, Bell, X, Eye } from 'lucide-react';
+import { Home, Users, Car, QrCode, Plus, Share2, Shield, Bell, X, Eye, Clock } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 import api from '../services/api';
 
 export default function ResidenteDashboard({ user }) {
@@ -161,7 +162,10 @@ export default function ResidenteDashboard({ user }) {
                   <td className="p-3">{v.cedulaVisitante || v.cedula}</td>
                   <td className="p-3 font-mono">{v.placaVisitante || v.placaVehiculo || '-'}</td>
                   <td className="p-3">
-                    <button className="text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-100 text-xs font-bold flex items-center gap-2">
+                    <button
+                      onClick={() => handleVerQR(v)}
+                      className="text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-100 text-xs font-bold flex items-center gap-2 hover:bg-emerald-100 transition-colors"
+                    >
                        <QrCode size={14}/> Ver QR
                     </button>
                   </td>
@@ -318,6 +322,121 @@ export default function ResidenteDashboard({ user }) {
         {view === 'crear' && renderCrear()}
         {view === 'vehiculo' && renderVehiculo()}
       </main>
+
+      {/* Modal QR */}
+      {showQRModal && selectedVisitante && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 text-white">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h3 className="text-xl font-bold">Pase de Acceso</h3>
+                  <p className="text-emerald-100 text-sm mt-1">
+                    {selectedVisitante.nombre || selectedVisitante.nombreVisitante} {selectedVisitante.apellido || selectedVisitante.apellidoVisitante}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowQRModal(false);
+                    setSelectedVisitante(null);
+                    setQrData(null);
+                    setCodigoDinamico(null);
+                  }}
+                  className="text-white/80 hover:text-white transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+            </div>
+
+            {/* Content */}
+            <div className="p-6">
+              {qrLoading ? (
+                <div className="flex flex-col items-center justify-center py-8">
+                  <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
+                  <p className="text-slate-500">Generando código de acceso...</p>
+                </div>
+              ) : (
+                <>
+                  {/* Código Dinámico TOTP */}
+                  {codigoDinamico?.codigo && (
+                    <div className="mb-6">
+                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
+                        <p className="text-amber-800 text-sm font-medium mb-2 flex items-center gap-2">
+                          <Clock size={16} /> Código de Acceso Dinámico
+                        </p>
+                        <div className="flex items-center justify-center gap-1">
+                          {codigoDinamico.codigo.split('').map((digit, i) => (
+                            <span
+                              key={i}
+                              className="w-10 h-12 bg-white border-2 border-amber-300 rounded-lg flex items-center justify-center text-2xl font-bold text-amber-700"
+                            >
+                              {digit}
+                            </span>
+                          ))}
+                        </div>
+                        <p className="text-amber-600 text-xs text-center mt-2">
+                          Válido por {Math.floor((codigoDinamico.expiraEn || 600) / 60)} minutos más
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* QR Code */}
+                  {qrData && (
+                    <div className="mb-6">
+                      <div className="flex justify-center">
+                        <div className="bg-white p-4 rounded-xl border-2 border-emerald-200 shadow-sm">
+                          <QRCodeSVG
+                            value={qrData.url || qrData}
+                            size={200}
+                            level="H"
+                            includeMargin={true}
+                            fgColor="#064e3b"
+                            bgColor="#ffffff"
+                          />
+                        </div>
+                      </div>
+                      {qrData.expiracion && (
+                        <p className="text-slate-500 text-xs text-center mt-3">
+                          QR válido hasta: {new Date(qrData.expiracion).toLocaleString('es-CO', {
+                            dateStyle: 'short',
+                            timeStyle: 'short'
+                          })}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Instrucciones */}
+                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
+                    <p className="text-slate-700 text-sm font-medium mb-2">📱 Instrucciones</p>
+                    <ul className="text-slate-600 text-sm space-y-1">
+                      <li>• Comparte el <strong>código de 6 dígitos</strong> con tu visitante</li>
+                      <li>• El visitante ingresa a la página de acceso con su cédula y el código</li>
+                      <li>• El código cambia cada 10 minutos automáticamente</li>
+                    </ul>
+                  </div>
+
+                  {/* Botón cerrar */}
+                  <button
+                    onClick={() => {
+                      setShowQRModal(false);
+                      setSelectedVisitante(null);
+                      setQrData(null);
+                      setCodigoDinamico(null);
+                    }}
+                    className="w-full mt-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
