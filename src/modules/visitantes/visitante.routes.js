@@ -48,7 +48,11 @@ router.get("/parqueaderos", verificarToken, esPorteriaOAdmin, visitanteControlle
 router.put("/editarVisitante/:visitanteId", verificarToken, visitanteController.editarVisitante);
 
 // =======================================================
-// 📌 QR - Generar código QR para visitante
+// 📌 QR - Generar código QR para visitante (Solo Admin)
+// Este endpoint es para uso exclusivo de administradores.
+// NOTA: Cada QR generado invalida el anterior.
+// Para residentes, usar el flujo TOTP: GET /:visitanteId/codigo-actual
+// luego el visitante verifica con POST /verificar-acceso
 // =======================================================
 router.post("/qr/generar/:visitanteId", async (req, res) => {
     try {

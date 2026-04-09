@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Car, QrCode, Plus, Share2, Shield, Bell, X, Eye, Clock } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
+import { Home, Users, Car, KeyRound, Plus, Share2, Shield, Bell, X, Eye, Clock } from 'lucide-react';
 import api from '../services/api';
 
 export default function ResidenteDashboard({ user }) {
@@ -26,11 +25,10 @@ export default function ResidenteDashboard({ user }) {
   const [vehiculoSuccess, setVehiculoSuccess] = useState('');
   const [vehiculoError, setVehiculoError] = useState('');
 
-  // QR Modal states
-  const [showQRModal, setShowQRModal] = useState(false);
+  // Código Modal states
+  const [showCodigoModal, setShowCodigoModal] = useState(false);
   const [selectedVisitante, setSelectedVisitante] = useState(null);
-  const [qrData, setQrData] = useState(null);
-  const [qrLoading, setQrLoading] = useState(false);
+  const [loadingCodigo, setLoadingCodigo] = useState(false);
   const [codigoDinamico, setCodigoDinamico] = useState(null);
 
   const fetchVisitantes = async () => {
@@ -92,25 +90,21 @@ export default function ResidenteDashboard({ user }) {
     }
   };
 
-  const handleVerQR = async (visitante) => {
+  const handleVerCodigo = async (visitante) => {
     setSelectedVisitante(visitante);
-    setShowQRModal(true);
-    setQrLoading(true);
-    setQrData(null);
+    setShowCodigoModal(true);
+    setLoadingCodigo(true);
     setCodigoDinamico(null);
     try {
       // Obtener código dinámico TOTP
-      const codigoResp = await api.get(`/visitantes/${visitante._id || visitante.id}/codigo-actual`);
-      setCodigoDinamico(codigoResp.data);
-
-      // Generar QR
-      const qrResp = await api.post(`/visitantes/qr/generar/${visitante._id || visitante.id}`, { horasValidez: 24 });
-      setQrData(qrResp.data?.qr || qrResp.data);
+      const resp = await api.get(`/visitantes/${visitante._id || visitante.id}/codigo-actual`);
+      setCodigoDinamico(resp.data);
     } catch (error) {
-      console.error('Error al obtener datos:', error);
-      setError('Error al generar QR: ' + (error.response?.data?.error || error.message));
+      console.error('Error al obtener código:', error);
+      alert('Error al obtener código de acceso: ' + (error.response?.data?.error || error.message));
+      setShowCodigoModal(false);
     } finally {
-      setQrLoading(false);
+      setLoadingCodigo(false);
     }
   };
 
@@ -120,10 +114,10 @@ export default function ResidenteDashboard({ user }) {
         <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-6 shadow-lg shadow-emerald-200 text-white relative overflow-hidden">
           <div className="relative z-10">
             <h2 className="text-2xl font-bold mb-2">Nuevo Visitante</h2>
-            <p className="text-emerald-100 mb-6 max-w-sm">Genera un código QR rápido o envíalo por WhatsApp para que tu invitado entre sin demoras en portería.</p>
+            <p className="text-emerald-100 mb-6 max-w-sm">Genera un código de acceso para que tu invitado entre sin demoras en portería.</p>
             <div className="flex flex-wrap gap-3">
               <button onClick={() => setView('crear')} className="bg-white text-emerald-700 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:shadow-md transition hover:-translate-y-0.5">
-                <QrCode size={18} /> Crear Pase QR / Registrar
+                <KeyRound size={18} /> Registrar Visitante
               </button>
             </div>
           </div>
@@ -163,10 +157,10 @@ export default function ResidenteDashboard({ user }) {
                   <td className="p-3 font-mono">{v.placaVisitante || v.placaVehiculo || '-'}</td>
                   <td className="p-3">
                     <button
-                      onClick={() => handleVerQR(v)}
+                      onClick={() => handleVerCodigo(v)}
                       className="text-emerald-600 bg-emerald-50 px-3 py-1 rounded border border-emerald-100 text-xs font-bold flex items-center gap-2 hover:bg-emerald-100 transition-colors"
                     >
-                       <QrCode size={14}/> Ver QR
+                       <KeyRound size={14}/> Ver Código
                     </button>
                   </td>
                 </tr>
@@ -323,24 +317,23 @@ export default function ResidenteDashboard({ user }) {
         {view === 'vehiculo' && renderVehiculo()}
       </main>
 
-      {/* Modal QR */}
-      {showQRModal && selectedVisitante && (
+      {/* Modal Código de Acceso */}
+      {showCodigoModal && selectedVisitante && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
             {/* Header */}
             <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 text-white">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="text-xl font-bold">Pase de Acceso</h3>
+                  <h3 className="text-xl font-bold">Código de Acceso</h3>
                   <p className="text-emerald-100 text-sm mt-1">
                     {selectedVisitante.nombre || selectedVisitante.nombreVisitante} {selectedVisitante.apellido || selectedVisitante.apellidoVisitante}
                   </p>
                 </div>
                 <button
                   onClick={() => {
-                    setShowQRModal(false);
+                    setShowCodigoModal(false);
                     setSelectedVisitante(null);
-                    setQrData(null);
                     setCodigoDinamico(null);
                   }}
                   className="text-white/80 hover:text-white transition-colors"
@@ -352,79 +345,61 @@ export default function ResidenteDashboard({ user }) {
 
             {/* Content */}
             <div className="p-6">
-              {qrLoading ? (
+              {loadingCodigo ? (
                 <div className="flex flex-col items-center justify-center py-8">
                   <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-slate-500">Generando código de acceso...</p>
+                  <p className="text-slate-500">Generando código...</p>
                 </div>
-              ) : (
+              ) : codigoDinamico?.codigo ? (
                 <>
-                  {/* Código Dinámico TOTP */}
-                  {codigoDinamico?.codigo && (
-                    <div className="mb-6">
-                      <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-4">
-                        <p className="text-amber-800 text-sm font-medium mb-2 flex items-center gap-2">
-                          <Clock size={16} /> Código de Acceso Dinámico
-                        </p>
-                        <div className="flex items-center justify-center gap-1">
-                          {codigoDinamico.codigo.split('').map((digit, i) => (
-                            <span
-                              key={i}
-                              className="w-10 h-12 bg-white border-2 border-amber-300 rounded-lg flex items-center justify-center text-2xl font-bold text-amber-700"
-                            >
-                              {digit}
-                            </span>
-                          ))}
-                        </div>
-                        <p className="text-amber-600 text-xs text-center mt-2">
-                          Válido por {Math.floor((codigoDinamico.expiraEn || 600) / 60)} minutos más
+                  {/* Código TOTP */}
+                  <div className="mb-6">
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6">
+                      <p className="text-amber-800 text-sm font-medium mb-3 flex items-center gap-2 justify-center">
+                        <KeyRound size={18} /> Código de Acceso Dinámico
+                      </p>
+                      <div className="flex items-center justify-center gap-2">
+                        {codigoDinamico.codigo.split('').map((digit, i) => (
+                          <span
+                            key={i}
+                            className="w-12 h-14 bg-white border-2 border-amber-300 rounded-lg flex items-center justify-center text-3xl font-bold text-amber-700 shadow-sm"
+                          >
+                            {digit}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="mt-4 text-center">
+                        <p className="text-amber-600 text-sm font-medium flex items-center justify-center gap-1">
+                          <Clock size={14} /> Válido por {Math.floor((codigoDinamico.expiraEn || 600) / 60)} minutos más
                         </p>
                       </div>
                     </div>
-                  )}
-
-                  {/* QR Code */}
-                  {qrData && (
-                    <div className="mb-6">
-                      <div className="flex justify-center">
-                        <div className="bg-white p-4 rounded-xl border-2 border-emerald-200 shadow-sm">
-                          <QRCodeSVG
-                            value={qrData.url || qrData}
-                            size={200}
-                            level="H"
-                            includeMargin={true}
-                            fgColor="#064e3b"
-                            bgColor="#ffffff"
-                          />
-                        </div>
-                      </div>
-                      {qrData.expiracion && (
-                        <p className="text-slate-500 text-xs text-center mt-3">
-                          QR válido hasta: {new Date(qrData.expiracion).toLocaleString('es-CO', {
-                            dateStyle: 'short',
-                            timeStyle: 'short'
-                          })}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                  </div>
 
                   {/* Instrucciones */}
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-200">
-                    <p className="text-slate-700 text-sm font-medium mb-2">📱 Instrucciones</p>
-                    <ul className="text-slate-600 text-sm space-y-1">
-                      <li>• Comparte el <strong>código de 6 dígitos</strong> con tu visitante</li>
-                      <li>• El visitante ingresa a la página de acceso con su cédula y el código</li>
-                      <li>• El código cambia cada 10 minutos automáticamente</li>
+                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
+                    <p className="text-emerald-800 text-sm font-medium mb-2">📱 Instrucciones</p>
+                    <ul className="text-emerald-700 text-sm space-y-2">
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-500 font-bold">1.</span>
+                        Comparte este código de 6 dígitos con tu visitante (WhatsApp, SMS, etc.)
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-500 font-bold">2.</span>
+                        El visitante ingresa a "Acceso Visitante" en la página principal
+                      </li>
+                      <li className="flex items-start gap-2">
+                        <span className="text-emerald-500 font-bold">3.</span>
+                        Ingresa su cédula y este código para generar su QR de acceso
+                      </li>
                     </ul>
                   </div>
 
                   {/* Botón cerrar */}
                   <button
                     onClick={() => {
-                      setShowQRModal(false);
+                      setShowCodigoModal(false);
                       setSelectedVisitante(null);
-                      setQrData(null);
                       setCodigoDinamico(null);
                     }}
                     className="w-full mt-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
@@ -432,6 +407,10 @@ export default function ResidenteDashboard({ user }) {
                     Cerrar
                   </button>
                 </>
+              ) : (
+                <div className="text-center py-8 text-slate-500">
+                  No se pudo generar el código. Intenta de nuevo.
+                </div>
               )}
             </div>
           </div>
