@@ -5,7 +5,7 @@ const Visitante = require('./visitante.model');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
 
 const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
-    let { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante, residenteId } = data;
+    let { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante, residenteId, tipoVehiculo } = data;
 
     if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante || !placaVisitante) {
         throw new Error("Todos los campos son obligatorios: nombre, apellido, cédula y placa");
@@ -15,10 +15,36 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
         residenteId = null;
     }
 
+    // Determinar tipo de vehículo basado en la placa si no se especifica
+    if (!tipoVehiculo) {
+        // Placas de moto en Colombia suelen tener formato: ABC12 o ABC12D (terminan en letra)
+        const placaUpper = placaVisitante.toUpperCase();
+        if (placaUpper.length <= 5 || /^[A-Z]{3}[0-9]{2}[A-Z]?$/.test(placaUpper)) {
+            tipoVehiculo = 'MOTO';
+        } else {
+            tipoVehiculo = 'CARRO';
+        }
+    }
+
     let plaza = null;
 
     if (placaVisitante && placaVisitante.toUpperCase() !== 'N/A') {
-        plaza = await Parqueadero.findOne({ ...tenantFilter, estado: "DISPONIBLE" });
+        // Buscar parqueadero disponible para visitantes del tipo de vehículo correspondiente
+        plaza = await Parqueadero.findOne({
+            ...tenantFilter,
+            estado: "DISPONIBLE",
+            categoria: "VISITANTE",
+            tipoVehiculo: tipoVehiculo
+        });
+
+        // Si no hay del tipo específico, buscar cualquiera de visitante disponible
+        if (!plaza) {
+            plaza = await Parqueadero.findOne({
+                ...tenantFilter,
+                estado: "DISPONIBLE",
+                categoria: "VISITANTE"
+            });
+        }
     }
 
     const nuevoVisitante = new Visitante({
@@ -37,6 +63,7 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
         plaza.visitante = nuevoVisitante._id;
         plaza.estado = "OCUPADO";
         plaza.horaAsignacion = new Date();
+        plaza.placaVehiculo = placaVisitante;
         await plaza.save();
     }
 

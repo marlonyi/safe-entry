@@ -1,9 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Car, UserCheck, ShieldCheck, Activity, Search, Edit2, Trash2, Plus, Building, UserPlus, MonitorPlay, Home, Video, QrCode, X, Eye } from 'lucide-react';
+import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Trash2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
 import api from '../services/api';
 
 export default function AdminDashboard({ user }) {
-  const [stats, setStats] = useState({ usuariosTotal: 0, plazasLibres: 0, visitantesHoy: 0 });
   const [loading, setLoading] = useState(true);
   const [view, setView] = useState('dashboard');
 
@@ -13,7 +12,11 @@ export default function AdminDashboard({ user }) {
   const [historial, setHistorial] = useState([]);
   const [conjuntos, setConjuntos] = useState([]);
 
-  // Modals
+  const [filtroCategoria, setFiltroCategoria] = useState('todos');
+  const [torreSeleccionada, setTorreSeleccionada] = useState('A');
+  const [parkData, setParkData] = useState(null);
+  const [parkStats, setParkStats] = useState(null);
+
   const [showModal, setShowModal] = useState(false);
   const [formData, setFormData] = useState({});
   const [showConjuntoModal, setShowConjuntoModal] = useState(false);
@@ -21,7 +24,6 @@ export default function AdminDashboard({ user }) {
   const [editMode, setEditMode] = useState(false);
   const [editUserId, setEditUserId] = useState(null);
 
-  // QR Modal
   const [showQRModal, setShowQRModal] = useState(false);
   const [selectedVisitante, setSelectedVisitante] = useState(null);
   const [qrData, setQrData] = useState(null);
@@ -36,18 +38,23 @@ export default function AdminDashboard({ user }) {
         setUsuarios(usrData);
 
         const parkResp = await api.get('/parqueaderos');
-        const parkData = Array.isArray(parkResp.data?.data) ? parkResp.data.data : (Array.isArray(parkResp.data) ? parkResp.data : []);
-        setParqueaderos(parkData);
+        const parkDataResp = Array.isArray(parkResp.data?.data) ? parkResp.data.data : (Array.isArray(parkResp.data) ? parkResp.data : []);
+        setParqueaderos(parkDataResp);
 
-        const libs = parkData.filter(p => p.estado === 'DISPONIBLE').length || 0;
+        try {
+          const statsResp = await api.get('/parqueaderos/estadisticas');
+          setParkStats(statsResp.data?.data || statsResp.data);
+        } catch (e) {}
+
+        try {
+          const torreResp = await api.get('/parqueaderos/por-torre');
+          setParkData(torreResp.data?.data || torreResp.data);
+        } catch (e) {}
 
         if (view === 'dashboard' || view === 'visitantes') {
           const visResp = await api.get('/visitantes').catch(() => ({data:[]}));
           const vistData = Array.isArray(visResp.data?.data) ? visResp.data.data : (Array.isArray(visResp.data) ? visResp.data : []);
           setVisitantes(vistData);
-          setStats({ usuariosTotal: usrData.length, plazasLibres: libs, visitantesHoy: vistData.length });
-        } else {
-          setStats({ usuariosTotal: usrData.length, plazasLibres: libs, visitantesHoy: stats.visitantesHoy });
         }
 
         if (view === 'auditoria') {
@@ -90,7 +97,7 @@ export default function AdminDashboard({ user }) {
       const res = await api.get('/usuarios');
       setUsuarios(Array.isArray(res.data?.data) ? res.data.data : (Array.isArray(res.data) ? res.data : []));
     } catch (error) {
-      alert("Error al guardar usuario. Verifica los datos: " + (error.response?.data?.details?.[0]?.msg || error.response?.data?.error || error.message));
+      alert("Error al guardar usuario: " + (error.response?.data?.details?.[0]?.msg || error.response?.data?.error || error.message));
     }
   };
 
@@ -146,12 +153,12 @@ export default function AdminDashboard({ user }) {
       const res = await api.get('/conjuntos');
       setConjuntos(res.data?.conjuntos || []);
     } catch (error) {
-      alert("Error al crear conjunto. Puede que ya exista o falten datos.");
+      alert("Error al crear conjunto.");
     }
   };
 
   const menu = [
-    { id: 'dashboard', label: 'Dashboard', icon: Home },
+    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
     ...(user?.rol === 'superadmin' ? [{ id: 'conjuntos', label: 'Gestión Conjuntos', icon: Building }] : []),
     { id: 'usuarios', label: 'Gestión Usuarios', icon: Users },
     { id: 'visitantes', label: 'Visitantes', icon: UserCheck },
@@ -160,420 +167,726 @@ export default function AdminDashboard({ user }) {
     { id: 'simulador', label: 'Simulador Cámaras', icon: Video }
   ];
 
+  const POWERBI_EMBED_URL = import.meta.env.VITE_POWERBI_EMBED_URL || '';
+
   const renderDashboard = () => (
-    <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-        {[
-          { title: 'Usuarios', value: stats.usuariosTotal, icon: Users, color: 'text-blue-600', bg: 'bg-blue-100' },
-          { title: 'Plazas Libres', value: stats.plazasLibres, icon: Car, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-          { title: 'Visitantes', value: stats.visitantesHoy, icon: UserCheck, color: 'text-indigo-600', bg: 'bg-indigo-100' },
-          { title: 'Accesos Hoy', value: historial.length || 0, icon: Activity, color: 'text-orange-600', bg: 'bg-orange-100' }
-        ].map((stat, i) => (
-          <div key={i} className="bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex gap-4 items-center">
-             <div className={`p-3 rounded-xl ${stat.bg} ${stat.color}`}>
-                <stat.icon size={24} />
-             </div>
-             <div>
-               <p className="text-xs font-semibold text-slate-500 uppercase">{stat.title}</p>
-               <p className="text-2xl font-bold text-slate-900">{stat.value}</p>
-             </div>
+    <div className="relative">
+      {/* Power BI Dashboard */}
+      {POWERBI_EMBED_URL ? (
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="relative">
+                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-40 animate-pulse" />
+                <div className="relative p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
+                  <BarChart3 size={28} className="text-white" />
+                </div>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
+                  Dashboard Analítico
+                </h1>
+                <p className="text-slate-500 text-sm">Visualizaciones en tiempo real • Power BI</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 shadow-sm">
+                <div className="relative">
+                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
+                  <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
+                </div>
+                <span className="text-sm font-semibold text-emerald-700">En vivo</span>
+              </div>
+              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
+                <Clock size={14} className="text-slate-500" />
+                <span className="text-sm text-slate-600">{new Date().toLocaleTimeString()}</span>
+              </div>
+            </div>
           </div>
-        ))}
-      </div>
-    </>
+
+          {/* Power BI Container with Premium Design */}
+          <div className="relative group">
+            {/* Animated Gradient Border */}
+            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500 via-indigo-500 via-purple-500 to-pink-500 rounded-3xl opacity-40 group-hover:opacity-60 blur-sm transition-all duration-700" />
+
+            {/* Inner Container */}
+            <div className="relative bg-white rounded-3xl shadow-2xl overflow-hidden">
+              {/* Top Bar - macOS Style */}
+              <div className="flex items-center justify-between px-5 py-3 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-2">
+                    <div className="w-3 h-3 rounded-full bg-red-500 hover:bg-red-600 transition-colors cursor-pointer shadow-lg shadow-red-500/30" />
+                    <div className="w-3 h-3 rounded-full bg-amber-500 hover:bg-amber-600 transition-colors cursor-pointer shadow-lg shadow-amber-500/30" />
+                    <div className="w-3 h-3 rounded-full bg-emerald-500 hover:bg-emerald-600 transition-colors cursor-pointer shadow-lg shadow-emerald-500/30" />
+                  </div>
+                  <div className="h-4 w-px bg-slate-700" />
+                  <span className="text-xs text-slate-400 font-medium">Power BI Report</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="px-3 py-1 rounded-lg bg-slate-700/50 text-xs text-slate-300 font-mono">
+                    admin_residencial
+                  </div>
+                </div>
+              </div>
+
+              {/* Gradient Accent Line */}
+              <div className="h-1 bg-gradient-to-r from-blue-500 via-indigo-500 via-purple-500 to-pink-500" />
+
+              {/* iframe */}
+              <iframe
+                title="Dashboard Power BI - Admin Residencial"
+                width="100%"
+                height="700px"
+                src={POWERBI_EMBED_URL}
+                frameBorder="0"
+                allowFullScreen={true}
+                style={{ border: 'none', display: 'block' }}
+              />
+            </div>
+          </div>
+
+          {/* Footer Info */}
+          <div className="flex items-center justify-between px-4 py-3 bg-gradient-to-r from-slate-50 to-white rounded-xl border border-slate-200">
+            <div className="flex items-center gap-6 text-sm text-slate-500">
+              <div className="flex items-center gap-2">
+                <Users size={16} className="text-blue-500" />
+                <span>Usuarios activos</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Car size={16} className="text-emerald-500" />
+                <span>Parqueaderos monitoreados</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Activity size={16} className="text-purple-500" />
+                <span>Accesos registrados</span>
+              </div>
+            </div>
+            <div className="text-xs text-slate-400">
+              Actualizado automáticamente
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="flex items-center justify-center min-h-[500px]">
+          <div className="text-center p-8 bg-gradient-to-br from-amber-50 to-orange-50 rounded-2xl border border-amber-200 max-w-md">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center shadow-lg">
+              <BarChart3 size={32} className="text-white" />
+            </div>
+            <h3 className="text-lg font-bold text-amber-800 mb-2">Configuración Requerida</h3>
+            <p className="text-amber-700 text-sm mb-4">
+              Agrega la URL de Power BI en <code className="bg-amber-100 px-2 py-1 rounded">frontend/.env</code>
+            </p>
+            <code className="block text-xs bg-white p-3 rounded-lg border border-amber-200 text-slate-600">
+              VITE_POWERBI_EMBED_URL=https://app.powerbi.com/view?r=...
+            </code>
+          </div>
+        </div>
+      )}
+    </div>
   );
 
   const renderConjuntos = () => (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold">Gestión de Conjuntos (SuperAdmin)</h2>
-        <button onClick={() => setShowConjuntoModal(true)} className="bg-purple-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-purple-700">
-           <Plus size={16} /> Nuevo Conjunto
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left bg-slate-50 md:bg-white rounded-xl overflow-hidden shadow-sm md:shadow-none">
-          <thead className="hidden md:table-header-group">
-            <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
-              <th className="p-4 font-semibold">Nombre</th>
-              <th className="p-4 font-semibold">NIT</th>
-              <th className="p-4 font-semibold">Ciudad</th>
-              <th className="p-4 font-semibold">Estado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {conjuntos.map((c, i) => (
-               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                 <td className="p-4 font-bold text-slate-800">{c.nombre}</td>
-                 <td className="p-4 text-slate-600 font-mono text-sm">{c.nit || 'S/N'}</td>
-                 <td className="p-4 text-slate-600">{c.ciudad || '-'}</td>
-                 <td className="p-4">
-                     <span className={`px-3 py-1 rounded-full text-xs font-bold ${c.estado === 'activo' ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'}`}>
-                        {c.estado ? c.estado.toUpperCase() : 'ACTIVO'}
-                     </span>
-                 </td>
-               </tr>
-            ))}
-            {conjuntos.length === 0 && <tr><td colSpan="4" className="text-center p-4">No hay conjuntos registrados</td></tr>}
-          </tbody>
-        </table>
+    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500" />
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-purple-100">
+              <Building className="text-purple-600" size={20} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Gestión de Conjuntos</h2>
+          </div>
+          <button onClick={() => setShowConjuntoModal(true)} className="group relative px-5 py-2.5 rounded-xl font-semibold text-white overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-purple-500 to-fuchsia-500 transition-all duration-300 group-hover:scale-110" />
+            <span className="relative flex items-center gap-2"><Plus size={18} /> Nuevo Conjunto</span>
+          </button>
+        </div>
+        <div className="overflow-x-auto rounded-xl">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                <th className="p-4 font-semibold rounded-tl-lg">Nombre</th>
+                <th className="p-4 font-semibold">NIT</th>
+                <th className="p-4 font-semibold">Ciudad</th>
+                <th className="p-4 font-semibold rounded-tr-lg">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {conjuntos.map((c, i) => (
+                <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-purple-50 hover:to-transparent transition-all duration-200">
+                  <td className="p-4 font-bold text-slate-800">{c.nombre}</td>
+                  <td className="p-4 text-slate-600 font-mono text-sm">{c.nit || 'S/N'}</td>
+                  <td className="p-4 text-slate-600">{c.ciudad || '-'}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${c.estado === 'activo' ? 'bg-gradient-to-r from-emerald-100 to-teal-100 text-emerald-700 border border-emerald-200' : 'bg-gradient-to-r from-red-100 to-rose-100 text-red-700 border border-red-200'}`}>
+                      {c.estado ? c.estado.toUpperCase() : 'ACTIVO'}
+                    </span>
+                  </td>
+                </tr>
+              ))}
+              {conjuntos.length === 0 && <tr><td colSpan="4" className="text-center p-8 text-slate-400">No hay conjuntos registrados</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 
   const renderUsuarios = () => (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold">Residentes y Personal</h2>
-        <button onClick={async () => {
-             // Cargar conjuntos dinámicamente antes de abrir modal
-             const conjResp = await api.get('/conjuntos').catch(() => ({data:{conjuntos: []}}));
-             setConjuntos(conjResp.data?.conjuntos || []);
-             setEditMode(false);
-             setEditUserId(null);
-             setFormData({});
-             setShowModal(true);
-        }} className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700">
-           <UserPlus size={16} /> Agregar Usuario
-        </button>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left bg-slate-50 md:bg-white rounded-xl overflow-hidden">
-          <thead className="hidden md:table-header-group">
-            <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
-              <th className="p-4 font-semibold">Nombre</th>
-              <th className="p-4 font-semibold">Documento</th>
-              <th className="p-4 font-semibold">Rol</th>
-              <th className="p-4 font-semibold">Ubicación</th>
-              <th className="p-4 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(usuarios||[]).map((u, i) => (
-               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                 <td className="p-4 font-medium">{u.nombre} {u.apellido}</td>
-                 <td className="p-4">{u.cedula}</td>
-                 <td className="p-4">
-                   <span className={`px-2 py-1 rounded text-xs font-bold ${u.rol === 'admin' || u.rol === 'ADMIN' ? 'bg-purple-100 text-purple-700' : u.rol === 'porteria' || u.rol === 'PORTERO' ? 'bg-orange-100 text-orange-700' : 'bg-blue-100 text-blue-700'}`}>
+    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500" />
+      <div className="p-6">
+        <div className="flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 rounded-xl bg-blue-100">
+              <Users className="text-blue-600" size={20} />
+            </div>
+            <h2 className="text-xl font-bold text-slate-800">Residentes y Personal</h2>
+          </div>
+          <button onClick={async () => {
+            const conjResp = await api.get('/conjuntos').catch(() => ({data:{conjuntos: []}}));
+            setConjuntos(conjResp.data?.conjuntos || []);
+            setEditMode(false);
+            setEditUserId(null);
+            setFormData({});
+            setShowModal(true);
+          }} className="group relative px-5 py-2.5 rounded-xl font-semibold text-white overflow-hidden">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300 group-hover:scale-110" />
+            <span className="relative flex items-center gap-2"><UserPlus size={18} /> Agregar Usuario</span>
+          </button>
+        </div>
+        <div className="overflow-x-auto rounded-xl">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                <th className="p-4 font-semibold rounded-tl-lg">Nombre</th>
+                <th className="p-4 font-semibold">Documento</th>
+                <th className="p-4 font-semibold">Rol</th>
+                <th className="p-4 font-semibold">Ubicación</th>
+                <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(usuarios||[]).map((u, i) => (
+                <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200">
+                  <td className="p-4 font-medium text-slate-800">{u.nombre} {u.apellido}</td>
+                  <td className="p-4 text-slate-600">{u.cedula}</td>
+                  <td className="p-4">
+                    <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${u.rol === 'admin' || u.rol === 'ADMIN' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700 border border-purple-200' : u.rol === 'porteria' || u.rol === 'PORTERO' ? 'bg-gradient-to-r from-orange-100 to-amber-100 text-orange-700 border border-orange-200' : 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-200'}`}>
                       {u.rol}
-                   </span>
-                 </td>
-                 <td className="p-4 text-slate-500">T{u.torre || '-'} / Apto {u.apartamento || '-'}</td>
-                 <td className="p-4">
-                   <div className="flex gap-2">
-                     <button onClick={() => handleEditarUsuario(u)} className="p-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors" title="Editar">
-                       <Edit2 size={16} />
-                     </button>
-                     {(user?.rol === 'superadmin' || user?.rol === 'admin') && u.rol !== 'superadmin' && (
-                       <button onClick={() => handleEliminarUsuario(u)} className="p-1.5 bg-red-50 hover:bg-red-100 rounded-lg text-red-600 transition-colors" title="Eliminar">
-                         <Trash2 size={16} />
-                       </button>
-                     )}
-                   </div>
-                 </td>
-               </tr>
-            ))}
-          </tbody>
-        </table>
+                    </span>
+                  </td>
+                  <td className="p-4 text-slate-500">T{u.torre || '-'} / Apto {u.apartamento || '-'}</td>
+                  <td className="p-4">
+                    <div className="flex gap-2">
+                      <button onClick={() => handleEditarUsuario(u)} className="p-2 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-all duration-200 hover:scale-110" title="Editar">
+                        <Edit2 size={16} />
+                      </button>
+                      {(user?.rol === 'superadmin' || user?.rol === 'admin') && u.rol !== 'superadmin' && (
+                        <button onClick={() => handleEliminarUsuario(u)} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 transition-all duration-200 hover:scale-110" title="Eliminar">
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 
   const renderVisitantes = () => (
-    <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-      <h2 className="text-xl font-bold mb-6">Control de Visitantes</h2>
-      <div className="overflow-x-auto">
-        <table className="w-full text-left bg-slate-50 md:bg-white rounded-xl overflow-hidden">
-          <thead className="hidden md:table-header-group">
-            <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-100">
-              <th className="p-4 font-semibold">Visitante</th>
-              <th className="p-4 font-semibold">Cédula</th>
-              <th className="p-4 font-semibold">Placa Vehículo</th>
-              <th className="p-4 font-semibold">Autoriza (Residente)</th>
-              <th className="p-4 font-semibold">Acciones</th>
-            </tr>
-          </thead>
-          <tbody>
-            {visitantes.map((v, i) => (
-               <tr key={i} className="border-b border-slate-50 hover:bg-slate-50">
-                 <td className="p-4 font-medium">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
-                 <td className="p-4">{v.cedulaVisitante || v.cedula}</td>
-                 <td className="p-4 font-mono">{v.placaVisitante || v.placaVehiculo || 'N/A'}</td>
-                 <td className="p-4 text-slate-500">{v.usuarioId?.nombre || v.residenteId?.nombre || '-'}</td>
-                 <td className="p-4">
-                   <button onClick={() => handleVerQR(v)} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium transition-colors">
-                     <QrCode size={14} /> Ver QR
-                   </button>
-                 </td>
-               </tr>
-            ))}
-            {visitantes.length === 0 && <tr><td colSpan="5" className="text-center p-4">No hay visitantes</td></tr>}
-          </tbody>
-        </table>
+    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500" />
+      <div className="p-6">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-2 rounded-xl bg-emerald-100">
+            <UserCheck className="text-emerald-600" size={20} />
+          </div>
+          <h2 className="text-xl font-bold text-slate-800">Control de Visitantes</h2>
+        </div>
+        <div className="overflow-x-auto rounded-xl">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                <th className="p-4 font-semibold rounded-tl-lg">Visitante</th>
+                <th className="p-4 font-semibold">Cédula</th>
+                <th className="p-4 font-semibold">Placa Vehículo</th>
+                <th className="p-4 font-semibold">Autoriza</th>
+                <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {visitantes.map((v, i) => (
+                <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent transition-all duration-200">
+                  <td className="p-4 font-medium text-slate-800">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
+                  <td className="p-4 text-slate-600">{v.cedulaVisitante || v.cedula}</td>
+                  <td className="p-4 font-mono text-slate-700 bg-slate-50 rounded px-2">{v.placaVisitante || v.placaVehiculo || 'N/A'}</td>
+                  <td className="p-4 text-slate-500">{v.usuarioId?.nombre || v.residenteId?.nombre || '-'}</td>
+                  <td className="p-4">
+                    <button onClick={() => handleVerQR(v)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium transition-all duration-200 hover:scale-105 shadow-lg shadow-emerald-500/30">
+                      <QrCode size={16} /> Ver QR
+                    </button>
+                  </td>
+                </tr>
+              ))}
+              {visitantes.length === 0 && <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay visitantes</td></tr>}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex w-full font-sans text-slate-800">
-      <aside className="w-64 bg-[#0F172A] hidden md:flex flex-col fixed h-full z-10 shadow-xl overflow-y-auto">
-        <div className="p-6 border-b border-white/10 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white font-bold text-xl"><ShieldCheck size={24}/></div>
-          <div><p className="font-bold text-white tracking-wide">Admin</p><p className="text-xs text-slate-400">SafeEntry System</p></div>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 flex w-full font-sans text-slate-800">
+      {/* Modern Sidebar */}
+      <aside className="w-72 bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900 hidden md:flex flex-col fixed h-full z-20 shadow-2xl overflow-hidden">
+        {/* Animated Background */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-96 h-96 bg-blue-500 rounded-full blur-3xl transform -translate-x-1/2 -translate-y-1/2 animate-pulse" />
+          <div className="absolute bottom-0 right-0 w-96 h-96 bg-purple-500 rounded-full blur-3xl transform translate-x-1/2 translate-y-1/2 animate-pulse" style={{ animationDelay: '1s' }} />
         </div>
-        <nav className="flex-1 px-4 py-6 space-y-1">
-          {menu.map(m => (
-            <button key={m.id} onClick={() => setView(m.id)} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === m.id ? 'bg-blue-500/15 text-blue-400' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-              <m.icon size={20} /><span>{m.label}</span>
+
+        {/* Logo */}
+        <div className="relative p-6 border-b border-white/10">
+          <div className="flex items-center gap-4">
+            <div className="relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur-lg opacity-50 animate-pulse" />
+              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
+                <ShieldCheck size={26} className="text-white" />
+              </div>
+            </div>
+            <div>
+              <p className="font-bold text-xl text-white tracking-wide">SafeEntry</p>
+              <p className="text-xs text-slate-400">Admin Dashboard</p>
+            </div>
+          </div>
+        </div>
+
+        {/* Navigation */}
+        <nav className="relative flex-1 p-4 space-y-1.5">
+          {menu.map((m, i) => (
+            <button
+              key={m.id}
+              onClick={() => setView(m.id)}
+              className={`group relative w-full p-3.5 rounded-xl font-medium transition-all duration-300 flex items-center gap-3 ${
+                view === m.id
+                  ? 'bg-gradient-to-r from-blue-500/20 to-indigo-500/20 text-white border border-blue-400/30'
+                  : 'text-slate-400 hover:bg-white/5 hover:text-white border border-transparent'
+              }`}
+            >
+              {view === m.id && (
+                <div className="absolute left-0 w-1 h-8 bg-gradient-to-b from-blue-400 to-indigo-500 rounded-r-full" />
+              )}
+              <m.icon size={20} className={`transition-transform duration-300 group-hover:scale-110 ${view === m.id ? 'text-blue-400' : ''}`} />
+              <span>{m.label}</span>
+              {view === m.id && (
+                <div className="absolute right-3 w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+              )}
             </button>
           ))}
         </nav>
+
+        {/* User Profile */}
+        <div className="relative p-4 border-t border-white/10">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
+              {user?.nombre?.charAt(0) || 'A'}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-white truncate">{user?.nombre || 'Administrador'}</p>
+              <p className="text-xs text-slate-400 capitalize">{user?.rol || 'admin'}</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
-      <main className="flex-1 md:ml-64 p-4 lg:p-8">
-        <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div><h1 className="text-2xl font-bold text-slate-900 capitalize">Panel de {view}</h1></div>
-          <div className="flex gap-4">
-             <div className="bg-slate-100 text-slate-700 font-medium px-4 py-2 rounded-xl flex items-center gap-2">
-                <ShieldCheck size={18} /> Administrador
-             </div>
+      {/* Main Content */}
+      <main className="flex-1 md:ml-72 p-4 lg:p-8">
+        {/* Header */}
+        <header className="relative mb-8 overflow-hidden rounded-2xl bg-white shadow-lg border border-slate-100">
+          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500" />
+          <div className="flex items-center justify-between p-5">
+            <div className="flex items-center gap-4">
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-100 to-indigo-100">
+                <BarChart3 size={24} className="text-blue-600" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent capitalize">
+                  {view === 'dashboard' ? 'Panel Principal' : `Gestión de ${view}`}
+                </h1>
+                <p className="text-sm text-slate-500">Bienvenido, {user?.nombre || 'Administrador'}</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="text-sm font-medium text-slate-700">Sistema Activo</span>
+              </div>
+              <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium flex items-center gap-2 shadow-lg shadow-blue-500/30">
+                <ShieldCheck size={18} />
+                <span className="text-sm">Admin</span>
+              </div>
+            </div>
           </div>
         </header>
 
-        {view === 'dashboard' && renderDashboard()}
-        {view === 'conjuntos' && renderConjuntos()}
-        {view === 'usuarios' && renderUsuarios()}
-        {view === 'visitantes' && renderVisitantes()}
-        
-        {view === 'parqueaderos' && (
-           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-             <h2 className="text-xl font-bold mb-6">Parqueaderos y Estado</h2>
-             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
-               {parqueaderos.map((p, i) => (
-                  <div key={i} className={`p-4 rounded-xl border ${p.estado==='DISPONIBLE' ? 'border-emerald-200 bg-emerald-50' : 'border-red-200 bg-red-50'}`}>
-                     <h3 className="font-bold">{p.numero}</h3>
-                     <p className={`text-xs font-bold ${p.estado==='DISPONIBLE' ? 'text-emerald-600' : 'text-red-600'}`}>{p.estado}</p>
-                     {p.placa && <p className="text-sm mt-2 font-mono bg-white inline-block px-2 rounded border border-slate-300">{p.placa}</p>}
+        {/* Content Views */}
+        <div className="animate-in fade-in duration-500">
+          {view === 'dashboard' && renderDashboard()}
+          {view === 'conjuntos' && renderConjuntos()}
+          {view === 'usuarios' && renderUsuarios()}
+          {view === 'visitantes' && renderVisitantes()}
+
+          {view === 'parqueaderos' && (
+            <div className="space-y-6">
+              {parkStats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  {[
+                    { title: 'Privados Carro', data: parkStats.porCategoria?.privado?.carro, gradient: 'from-blue-500 to-blue-600', icon: Car },
+                    { title: 'Privados Moto', data: parkStats.porCategoria?.privado?.moto, gradient: 'from-purple-500 to-purple-600', icon: Car },
+                    { title: 'Visitantes Carro', data: parkStats.porCategoria?.visitante?.carro, gradient: 'from-emerald-500 to-emerald-600', icon: Car },
+                    { title: 'Visitantes Moto', data: parkStats.porCategoria?.visitante?.moto, gradient: 'from-orange-500 to-orange-600', icon: Car }
+                  ].map((item, i) => (
+                    <div key={i} className={`relative overflow-hidden rounded-2xl bg-gradient-to-br ${item.gradient} p-5 shadow-xl`}>
+                      <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2" />
+                      <div className="relative flex items-center gap-4">
+                        <div className="p-3 rounded-xl bg-white/20 backdrop-blur-sm">
+                          <item.icon size={24} className="text-white opacity-90" />
+                        </div>
+                        <div>
+                          <p className="text-sm text-white/80 font-medium">{item.title}</p>
+                          <p className="text-2xl font-bold text-white">
+                            {item.data?.disponibles || 0}<span className="text-lg opacity-70">/{item.data?.total || 0}</span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100 p-6">
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {parkData?.torres?.map(torre => (
+                    <button
+                      key={torre}
+                      onClick={() => setTorreSeleccionada(torre)}
+                      className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                        torreSeleccionada === torre
+                          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-105'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
+                      }`}
+                    >
+                      Torre {torre}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setTorreSeleccionada('visitantes')}
+                    className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                      torreSeleccionada === 'visitantes'
+                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-105'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
+                    }`}
+                  >
+                    Visitantes
+                  </button>
+                </div>
+
+                {torreSeleccionada === 'visitantes' ? (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    {[
+                      { title: 'Carros', data: parkData?.visitantesCarro, icon: Car },
+                      { title: 'Motos', data: parkData?.visitantesMoto, icon: Car }
+                    ].map((section, i) => (
+                      <div key={i}>
+                        <h3 className="font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                          <section.icon size={18} /> {section.title}
+                        </h3>
+                        <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
+                          {section.data?.map((p, j) => (
+                            <div key={j} className={`p-3 rounded-xl border-2 text-center transition-all duration-200 hover:scale-105 ${
+                              p.estado === 'DISPONIBLE'
+                                ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
+                                : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-300'
+                            }`}>
+                              <p className="font-bold text-sm text-slate-800">{p.numero}</p>
+                              <p className={`text-xs font-medium ${p.estado === 'DISPONIBLE' ? 'text-emerald-600' : 'text-red-600'}`}>
+                                {p.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupado'}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-               ))}
-             </div>
-           </div>
-        )}
-        
-        {view === 'auditoria' && (
-           <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100">
-             <h2 className="text-xl font-bold mb-6">Historial y Auditoría</h2>
-             <div className="overflow-x-auto">
-               <table className="w-full text-left bg-slate-50 rounded-xl overflow-hidden">
-                 <thead className="bg-slate-100 text-slate-500 text-sm">
-                   <tr><th className="p-4">Fecha</th><th className="p-4">Tipo</th><th className="p-4">Placa / Detalle</th></tr>
-                 </thead>
-                 <tbody>
-                   {historial.map((h, i) => (
-                      <tr key={i} className="border-b border-slate-50"><td className="p-4">{new Date(h.fechaHora).toLocaleString()}</td><td className="p-4 font-bold">{h.tipo}</td><td className="p-4 font-mono">{h.placa || h.metodo || '-'}</td></tr>
-                   ))}
-                 </tbody>
-               </table>
-             </div>
-           </div>
-        )}
+                ) : (
+                  <div className="space-y-4">
+                    {Array.from({ length: 10 }, (_, idx) => {
+                      const piso = 10 - idx;
+                      const parqueosPiso = parkData?.porTorre?.[torreSeleccionada]?.filter(p =>
+                        p.numero?.startsWith(`${torreSeleccionada}-${piso}0`) ||
+                        p.numero?.startsWith(`${torreSeleccionada}-${piso}`)
+                      ) || [];
 
-        {view === 'simulador' && (
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-             <div className="bg-slate-900 p-8 rounded-3xl shadow-lg border border-slate-800 text-white text-center">
-                <Video size={64} className="mx-auto text-slate-600 mb-4" />
-                <h2 className="text-2xl font-bold mb-2">LPR (Cámara Placas)</h2>
-                <p className="text-slate-400 mb-6">Inicia el modelo de IA YOLOv8 para entrada vehicular nativo.</p>
-                <button 
-                  onClick={async () => {
-                    try {
-                      await api.post('/scripts/lpr');
-                      alert('Cámara LPR encendida! Revisa la ventana en tu escritorio.');
-                    } catch (error) {
-                      alert('Error al iniciar script LPR. Verifica la conexión.');
-                    }
-                  }}
-                  className="bg-blue-600 px-6 py-3 rounded-xl font-bold hover:bg-blue-500 transition shadow-lg shadow-blue-500/30 w-full">
-                   Abrir Escáner de Placas
-                </button>
-             </div>
-             
-             <div className="bg-slate-900 p-8 rounded-3xl shadow-lg border border-slate-800 text-white text-center">
-                <QrCode size={64} className="mx-auto text-slate-600 mb-4" />
-                <h2 className="text-2xl font-bold mb-2">Escáner Pases QR</h2>
-                <p className="text-slate-400 mb-6">Inicia la cámara para validar códigos QR de visitantes.</p>
-                <button 
-                  onClick={async () => {
-                    try {
-                      await api.post('/scripts/qr');
-                      alert('Cámara QR encendida! Revisa la ventana en tu escritorio.');
-                    } catch (error) {
-                      alert('Error al iniciar script QR. Verifica la conexión.');
-                    }
-                  }}
-                  className="bg-emerald-600 px-6 py-3 rounded-xl font-bold hover:bg-emerald-500 transition shadow-lg shadow-emerald-500/30 w-full">
-                   Abrir Escáner QR
-                </button>
-             </div>
-           </div>
-        )}
+                      if (parqueosPiso.length === 0) return null;
 
-        {/* Modal Conjunto */}
+                      return (
+                        <div key={piso} className="flex items-center gap-4">
+                          <div className="w-16 text-sm font-semibold text-slate-500 bg-slate-100 rounded-lg px-3 py-2 text-center">
+                            Piso {piso}
+                          </div>
+                          <div className="flex gap-3 flex-wrap">
+                            {parqueosPiso.sort((a, b) => (a.numero || '').localeCompare(b.numero || '')).map((p, j) => (
+                              <div key={j} className={`w-28 p-3 rounded-xl border-2 transition-all duration-200 hover:scale-105 ${
+                                p.estado === 'DISPONIBLE'
+                                  ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300'
+                                  : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-300'
+                              }`}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <Car size={14} className={p.estado === 'DISPONIBLE' ? 'text-blue-500' : 'text-red-500'} />
+                                </div>
+                                <p className="font-bold text-center text-slate-800">{p.numero}</p>
+                                <p className={`text-xs text-center font-medium ${p.estado === 'DISPONIBLE' ? 'text-blue-600' : 'text-red-600'}`}>
+                                  {p.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupado'}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {view === 'auditoria' && (
+            <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500" />
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="p-2 rounded-xl bg-orange-100">
+                    <Activity className="text-orange-600" size={20} />
+                  </div>
+                  <h2 className="text-xl font-bold text-slate-800">Historial y Auditoría</h2>
+                </div>
+                <div className="overflow-x-auto rounded-xl">
+                  <table className="w-full text-left">
+                    <thead>
+                      <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                        <th className="p-4 font-semibold rounded-tl-lg">Fecha</th>
+                        <th className="p-4 font-semibold">Tipo</th>
+                        <th className="p-4 font-semibold rounded-tr-lg">Placa / Detalle</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {historial.map((h, i) => (
+                        <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-orange-50 hover:to-transparent transition-all duration-200">
+                          <td className="p-4 text-slate-600">{new Date(h.fechaHora).toLocaleString()}</td>
+                          <td className="p-4 font-bold text-slate-800">{h.tipo}</td>
+                          <td className="p-4 font-mono text-slate-700 bg-slate-50 rounded px-2">{h.placa || h.metodo || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {view === 'simulador' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {[
+                { title: 'LPR (Cámara Placas)', desc: 'Modelo de IA YOLOv8 para detección de placas', icon: Video, gradient: 'from-blue-600 to-indigo-700', endpoint: '/scripts/lpr' },
+                { title: 'Escáner Pases QR', desc: 'Validación de códigos QR de visitantes', icon: QrCode, gradient: 'from-emerald-600 to-teal-700', endpoint: '/scripts/qr' }
+              ].map((item, i) => (
+                <div key={i} className="relative group overflow-hidden rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 p-8 shadow-xl border border-slate-700">
+                  <div className="relative text-center">
+                    <div className={`w-20 h-20 mx-auto rounded-2xl bg-gradient-to-br ${item.gradient} flex items-center justify-center mb-6 shadow-lg transition-transform duration-300 group-hover:scale-110`}>
+                      <item.icon size={40} className="text-white" />
+                    </div>
+                    <h2 className="text-2xl font-bold text-white mb-2">{item.title}</h2>
+                    <p className="text-slate-400 mb-6">{item.desc}</p>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await api.post(item.endpoint);
+                          alert('Sistema iniciado!');
+                        } catch (error) {
+                          alert('Error al iniciar.');
+                        }
+                      }}
+                      className={`w-full px-6 py-3 rounded-xl font-bold text-white bg-gradient-to-r ${item.gradient} hover:opacity-90 transition-all duration-300 shadow-lg hover:scale-105`}
+                    >
+                      Iniciar Sistema
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Modals */}
         {showConjuntoModal && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-lg shadow-2xl relative">
-               <button onClick={() => setShowConjuntoModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600">X</button>
-               <h2 className="text-xl font-bold mb-6 flex items-center gap-2"><Building className="text-purple-600" /> Nuevo Conjunto (Tenant)</h2>
-               <form onSubmit={handleCrearConjunto} className="grid grid-cols-2 gap-4">
-                  <div className="col-span-2">
-                    <label className="text-sm font-semibold text-slate-600">Nombre del Conjunto *</label>
-                    <input required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, nombre: e.target.value})} placeholder="Ej: Torres del Parque" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-600">NIT</label>
-                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, nit: e.target.value})} placeholder="900123456-1" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-600">Estado</label>
-                    <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" value={conjuntoData.estado} onChange={e => setConjuntoData({...conjuntoData, estado: e.target.value})}>
-                        <option value="activo">Activo</option>
-                        <option value="suspendido">Suspendido</option>
-                        <option value="inactivo">Inactivo</option>
-                    </select>
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-sm font-semibold text-slate-600">Dirección</label>
-                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, direccion: e.target.value})} placeholder="Calle 100 #15-25" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-600">Ciudad</label>
-                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, ciudad: e.target.value})} placeholder="Bogotá" />
-                  </div>
-                  <div>
-                    <label className="text-sm font-semibold text-slate-600">Teléfono / Email</label>
-                    <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, telefono: e.target.value})} placeholder="Contacto" />
-                  </div>
-                  <div className="col-span-2">
-                    <label className="text-sm font-semibold text-slate-600">Cantidad de Parqueaderos (Auto-generar)</label>
-                    <input type="number" min="0" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setConjuntoData({...conjuntoData, cantidadParqueaderos: parseInt(e.target.value) || 0})} placeholder="Ej: 50" />
-                  </div>
-                  <button type="submit" className="col-span-2 mt-4 bg-purple-600 text-white font-bold p-3 rounded-xl hover:bg-purple-700 transition-colors">
-                     Guardar Conjunto
-                  </button>
-               </form>
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-purple-500 via-fuchsia-500 to-pink-500 rounded-t-2xl" />
+              <button onClick={() => setShowConjuntoModal(false)} className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors">
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-purple-100">
+                  <Building className="text-purple-600" size={22} />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">Nuevo Conjunto</h2>
+              </div>
+              <form onSubmit={handleCrearConjunto} className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">Nombre del Conjunto *</label>
+                  <input required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" onChange={e => setConjuntoData({...conjuntoData, nombre: e.target.value})} placeholder="Ej: Torres del Parque" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">NIT</label>
+                  <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" onChange={e => setConjuntoData({...conjuntoData, nit: e.target.value})} placeholder="900123456-1" />
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">Estado</label>
+                  <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" value={conjuntoData.estado} onChange={e => setConjuntoData({...conjuntoData, estado: e.target.value})}>
+                    <option value="activo">Activo</option>
+                    <option value="suspendido">Suspendido</option>
+                    <option value="inactivo">Inactivo</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">Dirección</label>
+                  <input className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent transition-all" onChange={e => setConjuntoData({...conjuntoData, direccion: e.target.value})} placeholder="Calle 100 #15-25" />
+                </div>
+                <button type="submit" className="col-span-2 mt-2 p-3 rounded-xl font-bold text-white bg-gradient-to-r from-purple-500 to-fuchsia-500 hover:from-purple-600 hover:to-fuchsia-600 transition-all duration-300 shadow-lg shadow-purple-500/30">
+                  Guardar Conjunto
+                </button>
+              </form>
             </div>
           </div>
         )}
 
-        {/* Modal Usuario */}
         {showModal && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
-               <button onClick={() => {setShowModal(false); setEditMode(false); setEditUserId(null);}} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                 <UserPlus className="text-blue-600" /> {editMode ? 'Editar Usuario' : 'Registrar Usuario'}
-               </h2>
-               <form onSubmit={handleCrearUsuario} className="space-y-4">
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500 rounded-t-2xl" />
+              <button onClick={() => {setShowModal(false); setEditMode(false); setEditUserId(null);}} className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors">
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-blue-100">
+                  <UserPlus className="text-blue-600" size={22} />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">{editMode ? 'Editar Usuario' : 'Registrar Usuario'}</h2>
+              </div>
+              <form onSubmit={handleCrearUsuario} className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <label className="text-sm font-semibold text-slate-600">Nombre</label>
-                    <input required value={formData.nombre || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, nombre: e.target.value})} />
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Nombre</label>
+                    <input required value={formData.nombre || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, nombre: e.target.value})} />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-slate-600">Apellido</label>
-                    <input required value={formData.apellido || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, apellido: e.target.value})} />
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Apellido</label>
+                    <input required value={formData.apellido || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, apellido: e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">Cédula</label>
+                  <input required value={formData.cedula || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, cedula: e.target.value})} />
+                </div>
+                {!editMode && (
+                  <div>
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Contraseña</label>
+                    <input required type="password" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, password: e.target.value})} />
+                  </div>
+                )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Torre</label>
+                    <input value={formData.torre || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, torre: e.target.value})} placeholder="Ej: 1" />
                   </div>
                   <div>
-                    <label className="text-sm font-semibold text-slate-600">Cédula</label>
-                    <input required value={formData.cedula || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, cedula: e.target.value})} />
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Apartamento</label>
+                    <input value={formData.apartamento || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, apartamento: e.target.value})} placeholder="Ej: 101" />
                   </div>
-                  {!editMode && (
-                    <div>
-                      <label className="text-sm font-semibold text-slate-600">Contraseña</label>
-                      <input required type="password" className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, password: e.target.value})} />
-                    </div>
-                  )}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <label className="text-sm font-semibold text-slate-600">Torre</label>
-                      <input value={formData.torre || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, torre: e.target.value})} placeholder="Ej: 1" />
-                    </div>
-                    <div>
-                      <label className="text-sm font-semibold text-slate-600">Apartamento</label>
-                      <input value={formData.apartamento || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, apartamento: e.target.value})} placeholder="Ej: 101" />
-                    </div>
-                  </div>
-                  {user?.rol === 'superadmin' && (
+                </div>
+                {user?.rol === 'superadmin' && (
                   <div>
-                    <label className="text-sm font-semibold text-slate-600">Conjunto Residencial</label>
-                    <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" value={formData.conjuntoId || ''} onChange={e => setFormData({...formData, conjuntoId: e.target.value})}>
-                       <option value="">Selecciona el conjunto (Obligatorio)</option>
-                       {conjuntos && conjuntos.map(c => (
-                         <option key={c._id || c.id} value={c._id || c.id}>{c.nombre}</option>
-                       ))}
+                    <label className="text-sm font-semibold text-slate-600 block mb-1.5">Conjunto Residencial</label>
+                    <select className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" value={formData.conjuntoId || ''} onChange={e => setFormData({...formData, conjuntoId: e.target.value})}>
+                      <option value="">Selecciona el conjunto</option>
+                      {conjuntos && conjuntos.map(c => (
+                        <option key={c._id || c.id} value={c._id || c.id}>{c.nombre}</option>
+                      ))}
                     </select>
                   </div>
-                  )}
-                  <div>
-                    <label className="text-sm font-semibold text-slate-600">Rol</label>
-                    <select required value={formData.rol || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl mt-1" onChange={e => setFormData({...formData, rol: e.target.value})}>
-                       <option value="">Seleccione Rol</option>
-                       <option value="admin">Administrador</option>
-                       <option value="porteria">Portero</option>
-                       <option value="residente">Residente</option>
-                    </select>
-                  </div>
-                  <button type="submit" className="w-full bg-blue-600 text-white font-bold p-3 rounded-xl hover:bg-blue-700 transition">
-                     {editMode ? 'Actualizar Usuario' : 'Guardar Usuario'}
-                  </button>
-               </form>
+                )}
+                <div>
+                  <label className="text-sm font-semibold text-slate-600 block mb-1.5">Rol</label>
+                  <select required value={formData.rol || ''} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all" onChange={e => setFormData({...formData, rol: e.target.value})}>
+                    <option value="">Seleccione Rol</option>
+                    <option value="admin">Administrador</option>
+                    <option value="porteria">Portero</option>
+                    <option value="residente">Residente</option>
+                  </select>
+                </div>
+                <button type="submit" className="w-full p-3 rounded-xl font-bold text-white bg-gradient-to-r from-blue-500 to-cyan-500 hover:from-blue-600 hover:to-cyan-600 transition-all duration-300 shadow-lg shadow-blue-500/30">
+                  {editMode ? 'Actualizar Usuario' : 'Guardar Usuario'}
+                </button>
+              </form>
             </div>
           </div>
         )}
 
-        {/* Modal QR Visitante */}
         {showQRModal && (
-          <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-3xl p-6 w-full max-w-md shadow-2xl relative">
-               <button onClick={() => {setShowQRModal(false); setQrData(null); setSelectedVisitante(null);}} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20} /></button>
-               <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
-                 <QrCode className="text-emerald-600" /> Código QR de Visitante
-               </h2>
-               {selectedVisitante && (
-                 <div className="mb-4">
-                   <p className="text-slate-600"><span className="font-semibold">{selectedVisitante.nombreVisitante || selectedVisitante.nombre} {selectedVisitante.apellidoVisitante || selectedVisitante.apellido}</span></p>
-                   <p className="text-sm text-slate-500">Cédula: {selectedVisitante.cedulaVisitante || selectedVisitante.cedula}</p>
-                   {selectedVisitante.placaVisitante && <p className="text-sm text-slate-500">Placa: {selectedVisitante.placaVisitante}</p>}
-                 </div>
-               )}
-               {qrLoading ? (
-                 <div className="flex items-center justify-center py-8">
-                   <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-emerald-600"></div>
-                   <span className="ml-3 text-slate-600">Generando código QR...</span>
-                 </div>
-               ) : qrData ? (
-                 <div className="space-y-4">
-                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                     <p className="text-xs text-slate-500 mb-2">Token de acceso:</p>
-                     <code className="text-xs break-all text-slate-700 bg-slate-100 p-2 rounded block">{qrData.token}</code>
-                   </div>
-                   <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
-                     <p className="text-xs text-slate-500 mb-2">URL de verificación:</p>
-                     <code className="text-xs break-all text-slate-700 bg-slate-100 p-2 rounded block">{qrData.url}</code>
-                   </div>
-                   {qrData.expiracion && (
-                     <p className="text-sm text-amber-600">
-                       Válido hasta: {new Date(qrData.expiracion).toLocaleString()}
-                     </p>
-                   )}
-                   <div className="bg-blue-50 p-3 rounded-xl border border-blue-100">
-                     <p className="text-xs text-blue-700">
-                       <strong>Instrucciones:</strong> Comparta el token o URL con el visitante. El visitante puede presentar este código en portería para su verificación.
-                     </p>
-                   </div>
-                 </div>
-               ) : (
-                 <p className="text-slate-500 text-center py-4">No se pudo generar el código QR</p>
-               )}
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl p-8 w-full max-w-md shadow-2xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-emerald-500 via-teal-500 to-cyan-500 rounded-t-2xl" />
+              <button onClick={() => {setShowQRModal(false); setQrData(null); setSelectedVisitante(null);}} className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition-colors">
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 rounded-xl bg-emerald-100">
+                  <QrCode className="text-emerald-600" size={22} />
+                </div>
+                <h2 className="text-xl font-bold text-slate-800">Código QR de Visitante</h2>
+              </div>
+              {selectedVisitante && (
+                <div className="mb-6 p-4 bg-gradient-to-r from-slate-50 to-slate-100 rounded-xl border border-slate-200">
+                  <p className="text-slate-800 font-semibold">{selectedVisitante.nombreVisitante || selectedVisitante.nombre} {selectedVisitante.apellidoVisitante || selectedVisitante.apellido}</p>
+                  <p className="text-sm text-slate-500 mt-1">Cédula: {selectedVisitante.cedulaVisitante || selectedVisitante.cedula}</p>
+                </div>
+              )}
+              {qrLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
+                  <span className="ml-3 text-slate-600 font-medium">Generando código QR...</span>
+                </div>
+              ) : qrData ? (
+                <div className="space-y-4">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs text-slate-500 mb-2 font-medium">Token de acceso:</p>
+                    <code className="text-xs break-all text-slate-700 bg-white p-3 rounded-lg block border border-slate-100">{qrData.token}</code>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <p className="text-xs text-slate-500 mb-2 font-medium">URL de verificación:</p>
+                    <code className="text-xs break-all text-slate-700 bg-white p-3 rounded-lg block border border-slate-100">{qrData.url}</code>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-slate-500 text-center py-4">No se pudo generar el código QR</p>
+              )}
             </div>
           </div>
         )}

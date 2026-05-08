@@ -31,6 +31,14 @@ const usuarioSchema = new mongoose.Schema({
     },
     fotoPerfil: { type: String, default: null },
 
+    // ========== PARQUEADERO ASIGNADO ==========
+    // Para residentes: 1 parqueadero fijo por apartamento
+    parqueaderoAsignado: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Parqueadero",
+        default: null
+    },
+
     // ========== QR DE ACCESO PARA RESIDENTES ==========
     qrAcceso: {
         token: { type: String, default: null },
@@ -69,6 +77,7 @@ usuarioSchema.index({ conjunto: 1, cedula: 1 }, { unique: true });
 usuarioSchema.index({ conjunto: 1, rol: 1, createdAt: -1 }); // Listar usuarios por rol en un conjunto
 usuarioSchema.index({ conjunto: 1, placaVehiculo: 1 }); // Búsqueda por placa en un conjunto
 usuarioSchema.index({ conjunto: 1, torre: 1, apartamento: 1 }); // Búsqueda por ubicación
+usuarioSchema.index({ conjunto: 1, parqueaderoAsignado: 1 }); // Búsqueda por parqueadero
 
 // Índice para búsqueda global de cédula (para login con auto-detección de conjunto)
 usuarioSchema.index({ cedula: 1 });

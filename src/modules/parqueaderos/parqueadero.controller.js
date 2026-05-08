@@ -10,7 +10,17 @@ const { successResponse, errorResponse } = require("../../../utils/responseHandl
 const obtenerPlazas = async (req, res) => {
     try {
         const tenantFilter = getTenantFilter(req);
-        const plazas = await parqueaderoService.obtenerPlazas(tenantFilter);
+        const filtros = {};
+
+        // Filtros opcionales por categoría y tipo
+        if (req.query.categoria) {
+            filtros.categoria = req.query.categoria;
+        }
+        if (req.query.tipoVehiculo) {
+            filtros.tipoVehiculo = req.query.tipoVehiculo;
+        }
+
+        const plazas = await parqueaderoService.obtenerPlazas(tenantFilter, filtros);
         return successResponse(res, plazas, "Plazas obtenidas correctamente");
     } catch (error) {
         logger.error('Error al obtener plazas:', error.message);
@@ -18,10 +28,22 @@ const obtenerPlazas = async (req, res) => {
     }
 };
 
+const obtenerEstadisticas = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const stats = await parqueaderoService.obtenerEstadisticas(tenantFilter);
+        return successResponse(res, stats, "Estadísticas obtenidas");
+    } catch (error) {
+        logger.error('Error al obtener estadísticas:', error.message);
+        return errorResponse(res, "Error al obtener estadísticas", 500);
+    }
+};
+
 const asignarVisitante = async (req, res) => {
     try {
         const tenantFilter = getTenantFilter(req);
-        const plaza = await parqueaderoService.asignarVisitante(req.body.visitanteId, tenantFilter);
+        const { visitanteId, tipoVehiculo } = req.body;
+        const plaza = await parqueaderoService.asignarVisitante(visitanteId, tipoVehiculo, tenantFilter);
 
         if (req.usuarioLogueado) {
             await AuditLog.registrar({
@@ -32,6 +54,27 @@ const asignarVisitante = async (req, res) => {
         }
 
         return successResponse(res, plaza, "Parqueadero asignado");
+    } catch (error) {
+        return errorResponse(res, error.message, 400);
+    }
+};
+
+const asignarResidente = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const { plazaId, residenteId } = req.body;
+
+        const plaza = await parqueaderoService.asignarResidente(plazaId, residenteId, tenantFilter);
+
+        if (req.usuarioLogueado) {
+            await AuditLog.registrar({
+                usuario: req.usuarioLogueado,
+                accion: 'ASSIGN_RESIDENT_PARKING',
+                descripcion: `Asignó parqueadero ${plaza.numero} permanentemente a residente`
+            });
+        }
+
+        return successResponse(res, plaza, "Parqueadero asignado permanentemente");
     } catch (error) {
         return errorResponse(res, error.message, 400);
     }
@@ -50,7 +93,7 @@ const liberarPlazas = async (req, res) => {
                 descripcion: `Liberó la plaza ${plaza.numero}`
             });
         }
-        
+
         return successResponse(res, plaza, "Parqueadero liberado exitosamente");
     } catch (error) {
         return errorResponse(res, error.message, 400);
@@ -118,24 +161,24 @@ const registrarAcceso = async (req, res) => {
 
 const crearPlazasConjunto = async (req, res) => {
     try {
-        const { conjuntoId, cantidad } = req.body;
-        
+        const { conjuntoId, configuracion } = req.body;
+
         // Verificación extra puede ir en middleware o service
         if (req.usuarioLogueado && req.usuarioLogueado.rol !== 'superadmin' && req.usuarioLogueado.rol !== 'admin') {
              return errorResponse(res, "No autorizado", 403);
         }
 
-        const total = await parqueaderoService.crearPlazasConjunto(conjuntoId, cantidad);
+        const resultado = await parqueaderoService.crearPlazasConjunto(conjuntoId, configuracion);
 
         if (req.usuarioLogueado) {
             await AuditLog.registrar({
                 usuario: req.usuarioLogueado,
                 accion: 'INIT_PARKING',
-                descripcion: `Inicializó ${total} parqueaderos para el conjunto ${conjuntoId}`
+                descripcion: `Inicializó ${resultado.total} parqueaderos para el conjunto ${conjuntoId}`
             });
         }
 
-        return successResponse(res, { creados: total }, `${total} plazas creadas exitosamente`);
+        return successResponse(res, resultado, `${resultado.total} plazas creadas exitosamente`);
     } catch (error) {
         return errorResponse(res, error.message, 400);
     }
@@ -162,9 +205,8 @@ const eliminarPlaza = async (req, res) => {
 
 const editarPlaza = async (req, res) => {
     try {
-        const { numero, estado } = req.body;
         const tenantFilter = getTenantFilter(req);
-        const plaza = await parqueaderoService.editarPlaza(req.params.id, numero, estado, tenantFilter);
+        const plaza = await parqueaderoService.editarPlaza(req.params.id, req.body, tenantFilter);
 
         return successResponse(res, plaza, "Plaza actualizada exitosamente");
     } catch (error) {
@@ -181,16 +223,120 @@ const obtenerPlazasConjunto = async (req, res) => {
     }
 };
 
+const asignarParqueaderoApartamento = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const { usuarioId } = req.body;
+
+        const resultado = await parqueaderoService.asignarParqueaderoApartamento(usuarioId, tenantFilter);
+
+        if (req.usuarioLogueado) {
+            await AuditLog.registrar({
+                usuario: req.usuarioLogueado,
+                accion: 'ASSIGN_PARKING_APARTMENT',
+                descripcion: resultado.mensaje
+            });
+        }
+
+        return successResponse(res, resultado, resultado.mensaje);
+    } catch (error) {
+        return errorResponse(res, error.message, 400);
+    }
+};
+
+const liberarParqueaderoResidente = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const { usuarioId } = req.body;
+
+        const resultado = await parqueaderoService.liberarParqueaderoResidente(usuarioId, tenantFilter);
+
+        if (req.usuarioLogueado) {
+            await AuditLog.registrar({
+                usuario: req.usuarioLogueado,
+                accion: 'FREE_RESIDENT_PARKING',
+                descripcion: `Liberó parqueadero de residente`
+            });
+        }
+
+        return successResponse(res, resultado, resultado.mensaje);
+    } catch (error) {
+        return errorResponse(res, error.message, 400);
+    }
+};
+
+const obtenerParqueaderoPorApartamento = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const { torre, apartamento } = req.query;
+
+        if (!torre || !apartamento) {
+            return errorResponse(res, "Se requiere torre y apartamento", 400);
+        }
+
+        const parqueadero = await parqueaderoService.obtenerParqueaderoPorApartamento(torre, apartamento, tenantFilter);
+        return successResponse(res, parqueadero, parqueadero ? "Parqueadero encontrado" : "Sin parqueadero asignado");
+    } catch (error) {
+        return errorResponse(res, error.message, 500);
+    }
+};
+
+// Inicializar parqueaderos con configuración de torres/pisos/apartamentos
+const inicializarConjunto = async (req, res) => {
+    try {
+        const { conjuntoId } = req.params;
+        const configuracion = req.body;
+
+        if (!conjuntoId) {
+            return errorResponse(res, "Se requiere el ID del conjunto", 400);
+        }
+
+        const resultado = await parqueaderoService.crearPlazasConfiguracion(conjuntoId, configuracion);
+
+        if (req.usuarioLogueado) {
+            await AuditLog.registrar({
+                usuario: req.usuarioLogueado,
+                accion: 'INIT_PARKING_TOWERS',
+                descripcion: resultado.mensaje
+            });
+        }
+
+        return successResponse(res, resultado, resultado.mensaje);
+    } catch (error) {
+        logger.error('Error al inicializar parqueaderos:', error.message);
+        return errorResponse(res, error.message, 400);
+    }
+};
+
+// Obtener parqueaderos agrupados por torre
+const obtenerPorTorre = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const resultado = await parqueaderoService.obtenerParqueaderosPorTorre(tenantFilter);
+        return successResponse(res, resultado, "Parqueaderos obtenidos por torre");
+    } catch (error) {
+        logger.error('Error al obtener parqueaderos por torre:', error.message);
+        return errorResponse(res, "Error al obtener parqueaderos", 500);
+    }
+};
+
 module.exports = {
     obtenerPlazas,
+    obtenerEstadisticas,
     asignarVisitante,
+    asignarResidente,
     liberarPlazas,
     registrarEntrada,
     obtenerHistorial,
     registrarSalida,
     registrarAcceso,
     crearPlazasConjunto,
+    inicializarConjunto,
     eliminarPlaza,
     editarPlaza,
-    obtenerPlazasConjunto
+    obtenerPlazasConjunto,
+    asignarParqueaderoApartamento,
+    liberarParqueaderoResidente,
+    obtenerParqueaderoPorApartamento,
+    obtenerPorTorre
 };
