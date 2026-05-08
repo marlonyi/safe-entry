@@ -464,8 +464,8 @@ exports.obtenerUsuarios = async (req, res) => {
         }
 
         // Usar Promise.all para queries paralelas y .lean() para mejor rendimiento
-        let usuariosQuery = Usuario.find(query, '-password -__v');
-        let visitantesQuery = Visitante.find(visitantesFilter, '-__v');
+        let usuariosQuery = Usuario.find(query, '-password -__v').populate('conjunto', 'nombre');
+        let visitantesQuery = Visitante.find(visitantesFilter, '-__v').populate('conjunto', 'nombre');
 
         // Aplicar paginación si se especifica límite
         if (limit > 0) {

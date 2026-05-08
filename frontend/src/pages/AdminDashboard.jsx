@@ -15,6 +15,8 @@ export default function AdminDashboard({ user }) {
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
   const [torreSeleccionada, setTorreSeleccionada] = useState('privados');
   const [conjuntoSeleccionado, setConjuntoSeleccionado] = useState(null);
+  const [usuariosConjuntoFilter, setUsuariosConjuntoFilter] = useState('todos');
+  const [visitantesConjuntoFilter, setVisitantesConjuntoFilter] = useState('todos');
   const [parkData, setParkData] = useState(null);
   const [parkStats, setParkStats] = useState(null);
 
@@ -75,7 +77,7 @@ export default function AdminDashboard({ user }) {
 
         // La auditoria se maneja en un useEffect dedicado mas abajo
 
-        if (view === 'auditoria' || view === 'conjuntos') {
+        if (view === 'auditoria' || view === 'conjuntos' || view === 'usuarios' || view === 'visitantes') {
           const conjResp = await api.get('/conjuntos').catch(() => ({data: { conjuntos: [] }}));
           setConjuntos(conjResp.data?.conjuntos || conjResp.data?.data?.conjuntos || []);
         }
@@ -380,71 +382,155 @@ export default function AdminDashboard({ user }) {
     </div>
   );
 
-  const renderUsuarios = () => (
-    <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500" />
-      <div className="p-6">
-        <div className="flex justify-between items-center mb-6">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-blue-100">
-              <Users className="text-blue-600" size={20} />
+  const renderUsuarios = () => {
+    const usuariosFiltrados = (usuarios || []).filter(u => {
+      if (usuariosConjuntoFilter === 'todos') return true;
+      if (usuariosConjuntoFilter === 'sin-conjunto') return !u.conjunto;
+      const cId = typeof u.conjunto === 'object' ? u.conjunto?._id : u.conjunto;
+      return cId === usuariosConjuntoFilter;
+    });
+
+    const contarPorConjunto = (cId) => {
+      if (cId === 'todos') return (usuarios || []).length;
+      if (cId === 'sin-conjunto') return (usuarios || []).filter(u => !u.conjunto).length;
+      return (usuarios || []).filter(u => {
+        const id = typeof u.conjunto === 'object' ? u.conjunto?._id : u.conjunto;
+        return id === cId;
+      }).length;
+    };
+
+    const haySinConjunto = (usuarios || []).some(u => !u.conjunto);
+
+    return (
+      <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+        <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 via-cyan-500 to-teal-500" />
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-xl bg-blue-100">
+                <Users className="text-blue-600" size={20} />
+              </div>
+              <h2 className="text-xl font-bold text-slate-800">Residentes y Personal</h2>
             </div>
-            <h2 className="text-xl font-bold text-slate-800">Residentes y Personal</h2>
+            <button onClick={async () => {
+              const conjResp = await api.get('/conjuntos').catch(() => ({data:{conjuntos: []}}));
+              setConjuntos(conjResp.data?.conjuntos || conjResp.data?.data?.conjuntos || []);
+              setEditMode(false);
+              setEditUserId(null);
+              setFormData({});
+              setShowModal(true);
+            }} className="group relative px-5 py-2.5 rounded-xl font-semibold text-white overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300 group-hover:scale-110" />
+              <span className="relative flex items-center gap-2"><UserPlus size={18} /> Agregar Usuario</span>
+            </button>
           </div>
-          <button onClick={async () => {
-            const conjResp = await api.get('/conjuntos').catch(() => ({data:{conjuntos: []}}));
-            setConjuntos(conjResp.data?.conjuntos || []);
-            setEditMode(false);
-            setEditUserId(null);
-            setFormData({});
-            setShowModal(true);
-          }} className="group relative px-5 py-2.5 rounded-xl font-semibold text-white overflow-hidden">
-            <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300 group-hover:scale-110" />
-            <span className="relative flex items-center gap-2"><UserPlus size={18} /> Agregar Usuario</span>
-          </button>
-        </div>
-        <div className="overflow-x-auto rounded-xl">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
-                <th className="p-4 font-semibold rounded-tl-lg">Nombre</th>
-                <th className="p-4 font-semibold">Documento</th>
-                <th className="p-4 font-semibold">Rol</th>
-                <th className="p-4 font-semibold">Ubicación</th>
-                <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(usuarios||[]).map((u, i) => (
-                <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200">
-                  <td className="p-4 font-medium text-slate-800">{u.nombre} {u.apellido}</td>
-                  <td className="p-4 text-slate-600">{u.cedula}</td>
-                  <td className="p-4">
-                    <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${u.rol === 'admin' || u.rol === 'ADMIN' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700 border border-purple-200' : u.rol === 'porteria' || u.rol === 'PORTERO' ? 'bg-gradient-to-r from-orange-100 to-amber-100 text-orange-700 border border-orange-200' : 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-200'}`}>
-                      {u.rol}
-                    </span>
-                  </td>
-                  <td className="p-4 text-slate-500">T{u.torre || '-'} / Apto {u.apartamento || '-'}</td>
-                  <td className="p-4">
-                    <div className="flex gap-2">
-                      <button onClick={() => handleEditarUsuario(u)} className="p-2 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-all duration-200 hover:scale-110" title="Editar">
-                        <Edit2 size={16} />
-                      </button>
-                      {(user?.rol === 'superadmin' || user?.rol === 'admin') && u.rol !== 'superadmin' && (
-                        <button onClick={() => handleEliminarUsuario(u)} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 transition-all duration-200 hover:scale-110" title="Eliminar">
-                          <Trash2 size={16} />
-                        </button>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+
+          {/* Tabs de conjunto */}
+          <div className="mb-5">
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filtrar por conjunto</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => setUsuariosConjuntoFilter('todos')}
+                className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
+                  usuariosConjuntoFilter === 'todos'
+                    ? 'bg-gradient-to-r from-slate-700 to-slate-900 text-white shadow-lg scale-105'
+                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                Todos
+                <span className={`text-xs px-2 py-0.5 rounded-full ${
+                  usuariosConjuntoFilter === 'todos' ? 'bg-white/20' : 'bg-slate-200'
+                }`}>
+                  {contarPorConjunto('todos')}
+                </span>
+              </button>
+              {conjuntos.map(c => (
+                <button
+                  key={c._id}
+                  onClick={() => setUsuariosConjuntoFilter(c._id)}
+                  className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
+                    usuariosConjuntoFilter === c._id
+                      ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg scale-105'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  {c.nombre}
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    usuariosConjuntoFilter === c._id ? 'bg-white/20' : 'bg-slate-200'
+                  }`}>
+                    {contarPorConjunto(c._id)}
+                  </span>
+                </button>
               ))}
-            </tbody>
-          </table>
+              {haySinConjunto && (
+                <button
+                  onClick={() => setUsuariosConjuntoFilter('sin-conjunto')}
+                  className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
+                    usuariosConjuntoFilter === 'sin-conjunto'
+                      ? 'bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg scale-105'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
+                >
+                  Sin conjunto (Superadmin)
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    usuariosConjuntoFilter === 'sin-conjunto' ? 'bg-white/20' : 'bg-slate-200'
+                  }`}>
+                    {contarPorConjunto('sin-conjunto')}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="overflow-x-auto rounded-xl">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                  <th className="p-4 font-semibold rounded-tl-lg">Nombre</th>
+                  <th className="p-4 font-semibold">Documento</th>
+                  <th className="p-4 font-semibold">Rol</th>
+                  <th className="p-4 font-semibold">Ubicación</th>
+                  <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {usuariosFiltrados.length === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-8 text-center text-slate-500">
+                      No hay usuarios en este conjunto.
+                    </td>
+                  </tr>
+                ) : usuariosFiltrados.map((u, i) => (
+                  <tr key={u._id || i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200">
+                    <td className="p-4 font-medium text-slate-800">{u.nombre} {u.apellido}</td>
+                    <td className="p-4 text-slate-600">{u.cedula}</td>
+                    <td className="p-4">
+                      <span className={`px-3 py-1.5 rounded-full text-xs font-bold ${u.rol === 'admin' || u.rol === 'ADMIN' ? 'bg-gradient-to-r from-purple-100 to-fuchsia-100 text-purple-700 border border-purple-200' : u.rol === 'porteria' || u.rol === 'PORTERO' ? 'bg-gradient-to-r from-orange-100 to-amber-100 text-orange-700 border border-orange-200' : u.rol === 'superadmin' ? 'bg-gradient-to-r from-slate-200 to-slate-300 text-slate-700 border border-slate-300' : 'bg-gradient-to-r from-blue-100 to-cyan-100 text-blue-700 border border-blue-200'}`}>
+                        {u.rol}
+                      </span>
+                    </td>
+                    <td className="p-4 text-slate-500">T{u.torre || '-'} / Apto {u.apartamento || '-'}</td>
+                    <td className="p-4">
+                      <div className="flex gap-2">
+                        <button onClick={() => handleEditarUsuario(u)} className="p-2 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-all duration-200 hover:scale-110" title="Editar">
+                          <Edit2 size={16} />
+                        </button>
+                        {(user?.rol === 'superadmin' || user?.rol === 'admin') && u.rol !== 'superadmin' && (
+                          <button onClick={() => handleEliminarUsuario(u)} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 transition-all duration-200 hover:scale-110" title="Eliminar">
+                            <Trash2 size={16} />
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const renderVisitantes = () => (
     <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
@@ -456,35 +542,95 @@ export default function AdminDashboard({ user }) {
           </div>
           <h2 className="text-xl font-bold text-slate-800">Control de Visitantes</h2>
         </div>
-        <div className="overflow-x-auto rounded-xl">
-          <table className="w-full text-left">
-            <thead>
-              <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
-                <th className="p-4 font-semibold rounded-tl-lg">Visitante</th>
-                <th className="p-4 font-semibold">Cédula</th>
-                <th className="p-4 font-semibold">Placa Vehículo</th>
-                <th className="p-4 font-semibold">Autoriza</th>
-                <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {visitantes.map((v, i) => (
-                <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent transition-all duration-200">
-                  <td className="p-4 font-medium text-slate-800">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
-                  <td className="p-4 text-slate-600">{v.cedulaVisitante || v.cedula}</td>
-                  <td className="p-4 font-mono text-slate-700 bg-slate-50 rounded px-2">{v.placaVisitante || v.placaVehiculo || 'N/A'}</td>
-                  <td className="p-4 text-slate-500">{v.usuarioId?.nombre || v.residenteId?.nombre || '-'}</td>
-                  <td className="p-4">
-                    <button onClick={() => handleVerQR(v)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium transition-all duration-200 hover:scale-105 shadow-lg shadow-emerald-500/30">
-                      <QrCode size={16} /> Ver QR
+
+        {(() => {
+          const visitantesFiltrados = (visitantes || []).filter(v => {
+            if (visitantesConjuntoFilter === 'todos') return true;
+            const cId = typeof v.conjunto === 'object' ? v.conjunto?._id : v.conjunto;
+            return cId === visitantesConjuntoFilter;
+          });
+          const contar = (cId) => {
+            if (cId === 'todos') return (visitantes || []).length;
+            return (visitantes || []).filter(v => {
+              const id = typeof v.conjunto === 'object' ? v.conjunto?._id : v.conjunto;
+              return id === cId;
+            }).length;
+          };
+
+          return (
+            <>
+              <div className="mb-5">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filtrar por conjunto</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    onClick={() => setVisitantesConjuntoFilter('todos')}
+                    className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
+                      visitantesConjuntoFilter === 'todos'
+                        ? 'bg-gradient-to-r from-slate-700 to-slate-900 text-white shadow-lg scale-105'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                    }`}
+                  >
+                    Todos
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      visitantesConjuntoFilter === 'todos' ? 'bg-white/20' : 'bg-slate-200'
+                    }`}>
+                      {contar('todos')}
+                    </span>
+                  </button>
+                  {conjuntos.map(c => (
+                    <button
+                      key={c._id}
+                      onClick={() => setVisitantesConjuntoFilter(c._id)}
+                      className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
+                        visitantesConjuntoFilter === c._id
+                          ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg scale-105'
+                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                      }`}
+                    >
+                      {c.nombre}
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        visitantesConjuntoFilter === c._id ? 'bg-white/20' : 'bg-slate-200'
+                      }`}>
+                        {contar(c._id)}
+                      </span>
                     </button>
-                  </td>
-                </tr>
-              ))}
-              {visitantes.length === 0 && <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay visitantes</td></tr>}
-            </tbody>
-          </table>
-        </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                      <th className="p-4 font-semibold rounded-tl-lg">Visitante</th>
+                      <th className="p-4 font-semibold">Cédula</th>
+                      <th className="p-4 font-semibold">Placa Vehículo</th>
+                      <th className="p-4 font-semibold">Autoriza</th>
+                      <th className="p-4 font-semibold rounded-tr-lg">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {visitantesFiltrados.length === 0 ? (
+                      <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay visitantes en este conjunto</td></tr>
+                    ) : visitantesFiltrados.map((v, i) => (
+                      <tr key={v._id || i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent transition-all duration-200">
+                        <td className="p-4 font-medium text-slate-800">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
+                        <td className="p-4 text-slate-600">{v.cedulaVisitante || v.cedula}</td>
+                        <td className="p-4 font-mono text-slate-700 bg-slate-50 rounded px-2">{v.placaVisitante || v.placaVehiculo || 'N/A'}</td>
+                        <td className="p-4 text-slate-500">{v.usuarioId?.nombre || v.residenteId?.nombre || '-'}</td>
+                        <td className="p-4">
+                          <button onClick={() => handleVerQR(v)} className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-medium transition-all duration-200 hover:scale-105 shadow-lg shadow-emerald-500/30">
+                            <QrCode size={16} /> Ver QR
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          );
+        })()}
       </div>
     </div>
   );
