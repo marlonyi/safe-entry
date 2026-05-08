@@ -13,7 +13,8 @@ export default function AdminDashboard({ user }) {
   const [conjuntos, setConjuntos] = useState([]);
 
   const [filtroCategoria, setFiltroCategoria] = useState('todos');
-  const [torreSeleccionada, setTorreSeleccionada] = useState('A');
+  const [torreSeleccionada, setTorreSeleccionada] = useState('privados');
+  const [conjuntoSeleccionado, setConjuntoSeleccionado] = useState(null);
   const [parkData, setParkData] = useState(null);
   const [parkStats, setParkStats] = useState(null);
 
@@ -28,6 +29,21 @@ export default function AdminDashboard({ user }) {
   const [selectedVisitante, setSelectedVisitante] = useState(null);
   const [qrData, setQrData] = useState(null);
   const [qrLoading, setQrLoading] = useState(false);
+
+  // ===== Auditoria =====
+  const [audFiltros, setAudFiltros] = useState({
+    fechaInicio: '',
+    fechaFin: '',
+    tipoAcceso: '',
+    tipoUsuario: '',
+    placa: '',
+    conjunto: ''
+  });
+  const [audPage, setAudPage] = useState(1);
+  const [audLimit] = useState(50);
+  const [audMeta, setAudMeta] = useState({ total: 0, totalPages: 0 });
+  const [audStats, setAudStats] = useState(null);
+  const [audLoading, setAudLoading] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -57,14 +73,11 @@ export default function AdminDashboard({ user }) {
           setVisitantes(vistData);
         }
 
-        if (view === 'auditoria') {
-          const histResp = await api.get('/parqueaderos/historial').catch(() => ({data:[]}));
-          setHistorial(Array.isArray(histResp.data?.data) ? histResp.data.data : (Array.isArray(histResp.data) ? histResp.data : []));
-        }
+        // La auditoria se maneja en un useEffect dedicado mas abajo
 
-        if (view === 'conjuntos') {
+        if (view === 'auditoria' || view === 'conjuntos') {
           const conjResp = await api.get('/conjuntos').catch(() => ({data: { conjuntos: [] }}));
-          setConjuntos(conjResp.data?.conjuntos || []);
+          setConjuntos(conjResp.data?.conjuntos || conjResp.data?.data?.conjuntos || []);
         }
 
       } catch (error) {
@@ -75,6 +88,40 @@ export default function AdminDashboard({ user }) {
     };
     fetchData();
   }, [view]);
+
+  // ===== Carga de auditoria con filtros y paginacion =====
+  useEffect(() => {
+    if (view !== 'auditoria') return;
+    const cargarAuditoria = async () => {
+      try {
+        setAudLoading(true);
+        const params = new URLSearchParams();
+        Object.entries(audFiltros).forEach(([k, v]) => { if (v) params.append(k, v); });
+        params.append('page', audPage);
+        params.append('limit', audLimit);
+
+        const statsParams = new URLSearchParams();
+        ['fechaInicio', 'fechaFin', 'conjunto'].forEach(k => {
+          if (audFiltros[k]) statsParams.append(k, audFiltros[k]);
+        });
+
+        const [histResp, statsResp] = await Promise.all([
+          api.get(`/parqueaderos/historial?${params.toString()}`).catch(() => ({ data: { data: { items: [], total: 0, totalPages: 0 } } })),
+          api.get(`/parqueaderos/historial/estadisticas?${statsParams.toString()}`).catch(() => ({ data: { data: null } }))
+        ]);
+
+        const payload = histResp.data?.data || histResp.data || {};
+        setHistorial(Array.isArray(payload.items) ? payload.items : []);
+        setAudMeta({ total: payload.total || 0, totalPages: payload.totalPages || 0 });
+        setAudStats(statsResp.data?.data || statsResp.data || null);
+      } catch (e) {
+        console.error('Error cargando auditoria', e);
+      } finally {
+        setAudLoading(false);
+      }
+    };
+    cargarAuditoria();
+  }, [view, audFiltros, audPage, audLimit]);
 
   const handleCrearUsuario = async (e) => {
     e.preventDefault();
@@ -548,8 +595,8 @@ export default function AdminDashboard({ user }) {
               {parkStats && (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
-                    { title: 'Privados Carro', data: parkStats.porCategoria?.privado?.carro, gradient: 'from-blue-500 to-blue-600', icon: Car },
-                    { title: 'Privados Moto', data: parkStats.porCategoria?.privado?.moto, gradient: 'from-purple-500 to-purple-600', icon: Car },
+                    { title: 'Residentes Carro', data: parkStats.porCategoria?.privado?.carro, gradient: 'from-blue-500 to-blue-600', icon: Car },
+                    { title: 'Residentes Moto', data: parkStats.porCategoria?.privado?.moto, gradient: 'from-purple-500 to-purple-600', icon: Car },
                     { title: 'Visitantes Carro', data: parkStats.porCategoria?.visitante?.carro, gradient: 'from-emerald-500 to-emerald-600', icon: Car },
                     { title: 'Visitantes Moto', data: parkStats.porCategoria?.visitante?.moto, gradient: 'from-orange-500 to-orange-600', icon: Car }
                   ].map((item, i) => (
@@ -572,130 +619,335 @@ export default function AdminDashboard({ user }) {
               )}
 
               <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100 p-6">
-                <div className="flex flex-wrap gap-2 mb-6">
-                  {parkData?.torres?.map(torre => (
-                    <button
-                      key={torre}
-                      onClick={() => setTorreSeleccionada(torre)}
-                      className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
-                        torreSeleccionada === torre
-                          ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-105'
-                          : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
-                      }`}
-                    >
-                      Torre {torre}
-                    </button>
-                  ))}
-                  <button
-                    onClick={() => setTorreSeleccionada('visitantes')}
-                    className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
-                      torreSeleccionada === 'visitantes'
-                        ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
-                    }`}
-                  >
-                    Visitantes
-                  </button>
-                </div>
+                {(() => {
+                  const conjuntosList = parkData?.conjuntos || [];
+                  const activeConjuntoId = conjuntoSeleccionado || conjuntosList[0]?._id;
+                  const activeConjunto = conjuntosList.find(c => c._id === activeConjuntoId);
 
-                {torreSeleccionada === 'visitantes' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    {[
-                      { title: 'Carros', data: parkData?.visitantesCarro, icon: Car },
-                      { title: 'Motos', data: parkData?.visitantesMoto, icon: Car }
-                    ].map((section, i) => (
-                      <div key={i}>
-                        <h3 className="font-semibold text-slate-600 mb-3 flex items-center gap-2">
-                          <section.icon size={18} /> {section.title}
-                        </h3>
-                        <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
-                          {section.data?.map((p, j) => (
-                            <div key={j} className={`p-3 rounded-xl border-2 text-center transition-all duration-200 hover:scale-105 ${
-                              p.estado === 'DISPONIBLE'
-                                ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300'
-                                : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-300'
-                            }`}>
-                              <p className="font-bold text-sm text-slate-800">{p.numero}</p>
-                              <p className={`text-xs font-medium ${p.estado === 'DISPONIBLE' ? 'text-emerald-600' : 'text-red-600'}`}>
-                                {p.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupado'}
-                              </p>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {Array.from({ length: 10 }, (_, idx) => {
-                      const piso = 10 - idx;
-                      const parqueosPiso = parkData?.porTorre?.[torreSeleccionada]?.filter(p =>
-                        p.numero?.startsWith(`${torreSeleccionada}-${piso}0`) ||
-                        p.numero?.startsWith(`${torreSeleccionada}-${piso}`)
-                      ) || [];
+                  const seccionesActivas = torreSeleccionada === 'visitantes'
+                    ? [
+                        { title: 'Carros', data: activeConjunto?.visitantesCarro, color: 'emerald' },
+                        { title: 'Motos', data: activeConjunto?.visitantesMoto, color: 'orange' }
+                      ]
+                    : [
+                        { title: 'Carros', data: activeConjunto?.privadosCarro, color: 'blue' },
+                        { title: 'Motos', data: activeConjunto?.privadosMoto, color: 'purple' }
+                      ];
 
-                      if (parqueosPiso.length === 0) return null;
+                  const colorClassesDisponible = {
+                    emerald: 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-300',
+                    orange: 'bg-gradient-to-br from-orange-50 to-amber-50 border-orange-300',
+                    blue: 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300',
+                    purple: 'bg-gradient-to-br from-purple-50 to-violet-50 border-purple-300'
+                  };
+                  const textColorDisponible = {
+                    emerald: 'text-emerald-600',
+                    orange: 'text-orange-600',
+                    blue: 'text-blue-600',
+                    purple: 'text-purple-600'
+                  };
 
-                      return (
-                        <div key={piso} className="flex items-center gap-4">
-                          <div className="w-16 text-sm font-semibold text-slate-500 bg-slate-100 rounded-lg px-3 py-2 text-center">
-                            Piso {piso}
-                          </div>
-                          <div className="flex gap-3 flex-wrap">
-                            {parqueosPiso.sort((a, b) => (a.numero || '').localeCompare(b.numero || '')).map((p, j) => (
-                              <div key={j} className={`w-28 p-3 rounded-xl border-2 transition-all duration-200 hover:scale-105 ${
-                                p.estado === 'DISPONIBLE'
-                                  ? 'bg-gradient-to-br from-blue-50 to-indigo-50 border-blue-300'
-                                  : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-300'
-                              }`}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <Car size={14} className={p.estado === 'DISPONIBLE' ? 'text-blue-500' : 'text-red-500'} />
-                                </div>
-                                <p className="font-bold text-center text-slate-800">{p.numero}</p>
-                                <p className={`text-xs text-center font-medium ${p.estado === 'DISPONIBLE' ? 'text-blue-600' : 'text-red-600'}`}>
-                                  {p.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupado'}
-                                </p>
-                              </div>
+                  return (
+                    <>
+                      {conjuntosList.length > 0 && (
+                        <div className="mb-5">
+                          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Conjunto</p>
+                          <div className="flex flex-wrap gap-2">
+                            {conjuntosList.map(c => (
+                              <button
+                                key={c._id}
+                                onClick={() => setConjuntoSeleccionado(c._id)}
+                                className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                                  activeConjuntoId === c._id
+                                    ? 'bg-gradient-to-r from-slate-700 to-slate-900 text-white shadow-lg scale-105'
+                                    : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                }`}
+                              >
+                                {c.nombre}
+                              </button>
                             ))}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-                )}
+                      )}
+
+                      <div className="flex flex-wrap gap-2 mb-6 border-t border-slate-100 pt-5">
+                        <button
+                          onClick={() => setTorreSeleccionada('privados')}
+                          className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                            torreSeleccionada === 'privados'
+                              ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-105'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
+                          }`}
+                        >
+                          Residentes
+                        </button>
+                        <button
+                          onClick={() => setTorreSeleccionada('visitantes')}
+                          className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
+                            torreSeleccionada === 'visitantes'
+                              ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-105'
+                              : 'bg-slate-100 text-slate-600 hover:bg-slate-200 hover:scale-105'
+                          }`}
+                        >
+                          Visitantes
+                        </button>
+                      </div>
+
+                      {!activeConjunto ? (
+                        <p className="text-center text-slate-500 py-8">No hay conjuntos disponibles.</p>
+                      ) : (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                          {seccionesActivas.map((section, i) => (
+                            <div key={i}>
+                              <h3 className="font-semibold text-slate-600 mb-3 flex items-center gap-2">
+                                <Car size={18} /> {section.title}
+                                <span className="text-xs text-slate-400 font-normal">
+                                  ({section.data?.length || 0})
+                                </span>
+                              </h3>
+                              {(section.data?.length || 0) === 0 ? (
+                                <p className="text-sm text-slate-400 italic">Sin parqueaderos</p>
+                              ) : (
+                                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                                  {section.data
+                                    .slice()
+                                    .sort((a, b) => (a.numero || '').localeCompare(b.numero || ''))
+                                    .map((p, j) => (
+                                    <div key={j} className={`p-3 rounded-xl border-2 text-center transition-all duration-200 hover:scale-105 ${
+                                      p.estado === 'DISPONIBLE'
+                                        ? colorClassesDisponible[section.color]
+                                        : 'bg-gradient-to-br from-red-50 to-rose-50 border-red-300'
+                                    }`}>
+                                      <p className="font-bold text-sm text-slate-800">{p.numero}</p>
+                                      <p className={`text-xs font-medium ${
+                                        p.estado === 'DISPONIBLE' ? textColorDisponible[section.color] : 'text-red-600'
+                                      }`}>
+                                        {p.estado === 'DISPONIBLE' ? 'Disponible' : 'Ocupado'}
+                                      </p>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
           )}
 
           {view === 'auditoria' && (
-            <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
-              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500" />
-              <div className="p-6">
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-xl bg-orange-100">
-                    <Activity className="text-orange-600" size={20} />
-                  </div>
-                  <h2 className="text-xl font-bold text-slate-800">Historial y Auditoría</h2>
+            <div className="space-y-6">
+              {/* Cards de resumen */}
+              {audStats && (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                  {[
+                    { label: 'Total', value: audStats.total, gradient: 'from-slate-600 to-slate-700' },
+                    { label: 'Hoy', value: audStats.hoy, gradient: 'from-orange-500 to-amber-500' },
+                    { label: 'Entradas', value: audStats.entradas, gradient: 'from-emerald-500 to-teal-500' },
+                    { label: 'Salidas', value: audStats.salidas, gradient: 'from-rose-500 to-pink-500' },
+                    { label: 'Residentes', value: audStats.residentes, gradient: 'from-blue-500 to-indigo-500' },
+                    { label: 'Visitantes', value: audStats.visitantes, gradient: 'from-purple-500 to-violet-500' }
+                  ].map((c, i) => (
+                    <div key={i} className={`rounded-2xl bg-gradient-to-br ${c.gradient} p-4 shadow-lg`}>
+                      <p className="text-xs text-white/80 font-medium">{c.label}</p>
+                      <p className="text-2xl font-bold text-white mt-1">{(c.value || 0).toLocaleString()}</p>
+                    </div>
+                  ))}
                 </div>
-                <div className="overflow-x-auto rounded-xl">
-                  <table className="w-full text-left">
-                    <thead>
-                      <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
-                        <th className="p-4 font-semibold rounded-tl-lg">Fecha</th>
-                        <th className="p-4 font-semibold">Tipo</th>
-                        <th className="p-4 font-semibold rounded-tr-lg">Placa / Detalle</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {historial.map((h, i) => (
-                        <tr key={i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-orange-50 hover:to-transparent transition-all duration-200">
-                          <td className="p-4 text-slate-600">{new Date(h.fechaHora).toLocaleString()}</td>
-                          <td className="p-4 font-bold text-slate-800">{h.tipo}</td>
-                          <td className="p-4 font-mono text-slate-700 bg-slate-50 rounded px-2">{h.placa || h.metodo || '-'}</td>
-                        </tr>
+              )}
+
+              {/* Filtros */}
+              <div className="rounded-2xl bg-white shadow-xl border border-slate-100 p-5">
+                <div className="flex items-center gap-2 mb-4">
+                  <BarChart3 size={18} className="text-orange-600" />
+                  <h3 className="font-bold text-slate-800">Filtros</h3>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Desde</label>
+                    <input
+                      type="date"
+                      value={audFiltros.fechaInicio}
+                      onChange={e => { setAudFiltros({ ...audFiltros, fechaInicio: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Hasta</label>
+                    <input
+                      type="date"
+                      value={audFiltros.fechaFin}
+                      onChange={e => { setAudFiltros({ ...audFiltros, fechaFin: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Conjunto</label>
+                    <select
+                      value={audFiltros.conjunto}
+                      onChange={e => { setAudFiltros({ ...audFiltros, conjunto: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      <option value="">Todos</option>
+                      {conjuntos.map(c => (
+                        <option key={c._id} value={c._id}>{c.nombre}</option>
                       ))}
-                    </tbody>
-                  </table>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Tipo acceso</label>
+                    <select
+                      value={audFiltros.tipoAcceso}
+                      onChange={e => { setAudFiltros({ ...audFiltros, tipoAcceso: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      <option value="">Todos</option>
+                      <option value="entrada">Entrada</option>
+                      <option value="salida">Salida</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Tipo usuario</label>
+                    <select
+                      value={audFiltros.tipoUsuario}
+                      onChange={e => { setAudFiltros({ ...audFiltros, tipoUsuario: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent"
+                    >
+                      <option value="">Todos</option>
+                      <option value="residente">Residente</option>
+                      <option value="visitante">Visitante</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-xs font-semibold text-slate-500 block mb-1">Placa</label>
+                    <input
+                      type="text"
+                      placeholder="Buscar placa..."
+                      value={audFiltros.placa}
+                      onChange={e => { setAudFiltros({ ...audFiltros, placa: e.target.value }); setAudPage(1); }}
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-orange-500 focus:border-transparent uppercase"
+                    />
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-end">
+                  <button
+                    onClick={() => { setAudFiltros({ fechaInicio: '', fechaFin: '', tipoAcceso: '', tipoUsuario: '', placa: '', conjunto: '' }); setAudPage(1); }}
+                    className="px-4 py-2 text-sm font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-all"
+                  >
+                    Limpiar filtros
+                  </button>
+                </div>
+              </div>
+
+              {/* Tabla */}
+              <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-orange-500 via-amber-500 to-yellow-500" />
+                <div className="p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-xl bg-orange-100">
+                        <Activity className="text-orange-600" size={20} />
+                      </div>
+                      <h2 className="text-xl font-bold text-slate-800">Historial y Auditoría</h2>
+                    </div>
+                    <span className="text-sm text-slate-500">
+                      {audMeta.total.toLocaleString()} registros
+                    </span>
+                  </div>
+
+                  {audLoading ? (
+                    <p className="text-center py-12 text-slate-500">Cargando...</p>
+                  ) : historial.length === 0 ? (
+                    <p className="text-center py-12 text-slate-500">No se encontraron accesos con los filtros aplicados.</p>
+                  ) : (
+                    <div className="overflow-x-auto rounded-xl">
+                      <table className="w-full text-left">
+                        <thead>
+                          <tr className="bg-gradient-to-r from-slate-50 to-slate-100 text-slate-600 text-sm">
+                            <th className="p-3 font-semibold rounded-tl-lg">Fecha y hora</th>
+                            <th className="p-3 font-semibold">Conjunto</th>
+                            <th className="p-3 font-semibold">Acceso</th>
+                            <th className="p-3 font-semibold">Tipo usuario</th>
+                            <th className="p-3 font-semibold">Nombre</th>
+                            <th className="p-3 font-semibold">Placa</th>
+                            <th className="p-3 font-semibold rounded-tr-lg">Plaza</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {historial.map((h, i) => (
+                            <tr key={h._id || i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-orange-50 hover:to-transparent transition-all duration-200">
+                              <td className="p-3 text-slate-600 text-sm">{new Date(h.fechaHora).toLocaleString()}</td>
+                              <td className="p-3 text-slate-700 text-sm">{h.conjunto?.nombre || '-'}</td>
+                              <td className="p-3">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  h.tipoAcceso === 'entrada'
+                                    ? 'bg-emerald-100 text-emerald-700'
+                                    : 'bg-rose-100 text-rose-700'
+                                }`}>
+                                  {h.tipoAcceso}
+                                </span>
+                              </td>
+                              <td className="p-3">
+                                <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${
+                                  h.tipoUsuario === 'residente'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-purple-100 text-purple-700'
+                                }`}>
+                                  {h.tipoUsuario}
+                                </span>
+                              </td>
+                              <td className="p-3 text-slate-700 text-sm">{h.nombreUsuario || '-'}</td>
+                              <td className="p-3 font-mono text-slate-800 text-sm">{h.placa || '-'}</td>
+                              <td className="p-3 text-slate-600 text-sm">{h.plaza || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Paginacion */}
+                  {audMeta.totalPages > 1 && (
+                    <div className="mt-4 flex items-center justify-between">
+                      <p className="text-sm text-slate-500">
+                        Página {audPage} de {audMeta.totalPages}
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setAudPage(1)}
+                          disabled={audPage === 1}
+                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ⟪
+                        </button>
+                        <button
+                          onClick={() => setAudPage(p => Math.max(1, p - 1))}
+                          disabled={audPage === 1}
+                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ‹ Anterior
+                        </button>
+                        <button
+                          onClick={() => setAudPage(p => Math.min(audMeta.totalPages, p + 1))}
+                          disabled={audPage >= audMeta.totalPages}
+                          className="px-3 py-1.5 text-sm rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          Siguiente ›
+                        </button>
+                        <button
+                          onClick={() => setAudPage(audMeta.totalPages)}
+                          disabled={audPage >= audMeta.totalPages}
+                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          ⟫
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

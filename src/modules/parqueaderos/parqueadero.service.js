@@ -192,12 +192,84 @@ const registrarEntrada = async (codigoParqueadero, tenantFilter) => {
     return plaza;
 };
 
-const obtenerHistorial = async (tenantFilter) => {
-    return await HistorialAcceso.find(tenantFilter)
-        .populate('plazaId', 'numero')
-        .populate('visitanteId', 'nombre apellido placaVehiculo')
-        .sort({ fechaHora: -1 })
-        .limit(50);
+const obtenerHistorial = async (tenantFilter, opciones = {}) => {
+    const {
+        fechaInicio,
+        fechaFin,
+        tipoAcceso,
+        tipoUsuario,
+        placa,
+        conjunto,
+        page = 1,
+        limit = 50
+    } = opciones;
+
+    const filtro = { ...tenantFilter };
+
+    if (fechaInicio || fechaFin) {
+        filtro.fechaHora = {};
+        if (fechaInicio) filtro.fechaHora.$gte = new Date(fechaInicio);
+        if (fechaFin) {
+            const fin = new Date(fechaFin);
+            fin.setHours(23, 59, 59, 999);
+            filtro.fechaHora.$lte = fin;
+        }
+    }
+    if (tipoAcceso) filtro.tipoAcceso = tipoAcceso;
+    if (tipoUsuario) filtro.tipoUsuario = tipoUsuario;
+    if (placa) filtro.placa = { $regex: placa.toUpperCase(), $options: 'i' };
+    if (conjunto) filtro.conjunto = conjunto;
+
+    const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);
+    const lim = Math.min(200, parseInt(limit));
+
+    const [items, total] = await Promise.all([
+        HistorialAcceso.find(filtro)
+            .populate('conjunto', 'nombre')
+            .sort({ fechaHora: -1 })
+            .skip(skip)
+            .limit(lim)
+            .lean(),
+        HistorialAcceso.countDocuments(filtro)
+    ]);
+
+    return {
+        items,
+        total,
+        page: parseInt(page),
+        limit: lim,
+        totalPages: Math.ceil(total / lim)
+    };
+};
+
+const obtenerEstadisticasHistorial = async (tenantFilter, opciones = {}) => {
+    const { fechaInicio, fechaFin, conjunto } = opciones;
+    const filtro = { ...tenantFilter };
+
+    if (fechaInicio || fechaFin) {
+        filtro.fechaHora = {};
+        if (fechaInicio) filtro.fechaHora.$gte = new Date(fechaInicio);
+        if (fechaFin) {
+            const fin = new Date(fechaFin);
+            fin.setHours(23, 59, 59, 999);
+            filtro.fechaHora.$lte = fin;
+        }
+    }
+    if (conjunto) filtro.conjunto = conjunto;
+
+    const inicioHoy = new Date();
+    inicioHoy.setHours(0, 0, 0, 0);
+
+    const [total, entradas, salidas, residentes, visitantes, hoy] = await Promise.all([
+        HistorialAcceso.countDocuments(filtro),
+        HistorialAcceso.countDocuments({ ...filtro, tipoAcceso: 'entrada' }),
+        HistorialAcceso.countDocuments({ ...filtro, tipoAcceso: 'salida' }),
+        HistorialAcceso.countDocuments({ ...filtro, tipoUsuario: 'residente' }),
+        HistorialAcceso.countDocuments({ ...filtro, tipoUsuario: 'visitante' }),
+        HistorialAcceso.countDocuments({ ...filtro, fechaHora: { $gte: inicioHoy } })
+    ]);
+
+    return { total, entradas, salidas, residentes, visitantes, hoy };
 };
 
 const registrarSalida = async (plazaId, tenantFilter) => {
@@ -670,32 +742,58 @@ const crearPlazasConfiguracion = async (conjuntoId, config) => {
     };
 };
 
-// Obtener parqueaderos agrupados por torre
+// Obtener parqueaderos agrupados por torre (compatibilidad)
+// y tambien agrupados por conjunto con desglose carro/moto
 const obtenerParqueaderosPorTorre = async (tenantFilter) => {
     const parqueaderos = await Parqueadero.find(tenantFilter)
         .populate("residenteAsignado", "nombre apellido placaVehiculo torre apartamento")
+        .populate("conjunto", "nombre")
         .sort({ categoria: 1, torre: 1, apartamento: 1, numero: 1 });
 
-    // Separar privados y visitantes
+    // ===== Estructura legacy (todos los conjuntos juntos) =====
     const privados = parqueaderos.filter(p => p.categoria === 'PRIVADO');
     const visitantesCarro = parqueaderos.filter(p => p.categoria === 'VISITANTE' && p.tipoVehiculo === 'CARRO');
     const visitantesMoto = parqueaderos.filter(p => p.categoria === 'VISITANTE' && p.tipoVehiculo === 'MOTO');
+    const privadosCarro = privados.filter(p => p.tipoVehiculo === 'CARRO');
+    const privadosMoto = privados.filter(p => p.tipoVehiculo === 'MOTO');
 
-    // Agrupar privados por torre
     const porTorre = {};
-    const torres = [...new Set(privados.map(p => p.torre))].sort();
-
+    const torres = [...new Set(privados.map(p => p.torre).filter(Boolean))].sort();
     for (const torre of torres) {
         porTorre[torre] = privados
             .filter(p => p.torre === torre)
             .sort((a, b) => (a.apartamento || '').localeCompare(b.apartamento || ''));
     }
 
+    // ===== Agrupacion por conjunto =====
+    const conjuntosMap = {};
+    for (const p of parqueaderos) {
+        const cId = p.conjunto?._id?.toString() || 'sin-conjunto';
+        if (!conjuntosMap[cId]) {
+            conjuntosMap[cId] = {
+                _id: cId,
+                nombre: p.conjunto?.nombre || 'Sin conjunto',
+                privadosCarro: [],
+                privadosMoto: [],
+                visitantesCarro: [],
+                visitantesMoto: []
+            };
+        }
+        if (p.categoria === 'PRIVADO' && p.tipoVehiculo === 'CARRO') conjuntosMap[cId].privadosCarro.push(p);
+        else if (p.categoria === 'PRIVADO' && p.tipoVehiculo === 'MOTO') conjuntosMap[cId].privadosMoto.push(p);
+        else if (p.categoria === 'VISITANTE' && p.tipoVehiculo === 'CARRO') conjuntosMap[cId].visitantesCarro.push(p);
+        else if (p.categoria === 'VISITANTE' && p.tipoVehiculo === 'MOTO') conjuntosMap[cId].visitantesMoto.push(p);
+    }
+    const conjuntos = Object.values(conjuntosMap).sort((a, b) => a.nombre.localeCompare(b.nombre));
+
     return {
         porTorre,
         torres,
+        privadosCarro,
+        privadosMoto,
         visitantesCarro,
-        visitantesMoto
+        visitantesMoto,
+        conjuntos
     };
 };
 
@@ -707,6 +805,7 @@ module.exports = {
     liberarPlaza,
     registrarEntrada,
     obtenerHistorial,
+    obtenerEstadisticasHistorial,
     registrarSalida,
     registrarAccesoVehicular,
     crearPlazasConjunto,

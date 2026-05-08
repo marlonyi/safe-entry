@@ -115,10 +115,35 @@ const registrarEntrada = async (req, res) => {
 const obtenerHistorial = async (req, res) => {
     try {
         const tenantFilter = getTenantFilter(req);
-        const historial = await parqueaderoService.obtenerHistorial(tenantFilter);
+        const opciones = {
+            fechaInicio: req.query.fechaInicio,
+            fechaFin: req.query.fechaFin,
+            tipoAcceso: req.query.tipoAcceso,
+            tipoUsuario: req.query.tipoUsuario,
+            placa: req.query.placa,
+            conjunto: req.query.conjunto,
+            page: req.query.page || 1,
+            limit: req.query.limit || 50
+        };
+        const historial = await parqueaderoService.obtenerHistorial(tenantFilter, opciones);
         return successResponse(res, historial, "Historial obtenido");
     } catch (error) {
         return errorResponse(res, "Error al obtener historial", 500);
+    }
+};
+
+const obtenerEstadisticasHistorial = async (req, res) => {
+    try {
+        const tenantFilter = getTenantFilter(req);
+        const opciones = {
+            fechaInicio: req.query.fechaInicio,
+            fechaFin: req.query.fechaFin,
+            conjunto: req.query.conjunto
+        };
+        const stats = await parqueaderoService.obtenerEstadisticasHistorial(tenantFilter, opciones);
+        return successResponse(res, stats, "Estadisticas de historial");
+    } catch (error) {
+        return errorResponse(res, "Error al obtener estadisticas de historial", 500);
     }
 };
 
@@ -328,6 +353,7 @@ module.exports = {
     liberarPlazas,
     registrarEntrada,
     obtenerHistorial,
+    obtenerEstadisticasHistorial,
     registrarSalida,
     registrarAcceso,
     crearPlazasConjunto,

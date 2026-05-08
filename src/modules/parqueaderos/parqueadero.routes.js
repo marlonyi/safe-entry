@@ -50,6 +50,9 @@ router.post("/liberar-residente", verificarToken, esAdmin, parqueaderoController
 // 📌 Liberar plaza
 router.post("/liberar", verificarToken, esPorteriaOAdmin, parqueaderoController.liberarPlazas);
 
+// 📌 Estadisticas del historial (resumen para cards) - debe ir antes de /historial
+router.get("/historial/estadisticas", verificarToken, parqueaderoController.obtenerEstadisticasHistorial);
+
 // 📌 Obtener historial de accesos con filtros
 router.get("/historial", verificarToken, parqueaderoController.obtenerHistorial);
 
