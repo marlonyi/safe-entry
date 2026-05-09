@@ -129,6 +129,92 @@ router.get("/qr/verificar/:token", async (req, res) => {
 });
 
 // =======================================================
+// 📌 PORTERIA - Registrar entrada del visitante por ID
+// (cambia estado a 'ingresado' y crea HistorialAcceso)
+// =======================================================
+router.post("/:visitanteId/registrar-ingreso", verificarToken, esPorteriaOAdmin, async (req, res) => {
+    try {
+        const HistorialAcceso = require("../../shared/models/historialAcceso");
+        const { visitanteId } = req.params;
+        const visitante = await Visitante.findById(visitanteId);
+        if (!visitante) return res.status(404).json({ success: false, error: "Visitante no encontrado" });
+
+        // Verificar tenant
+        if (req.usuario && req.usuario.rol !== 'superadmin') {
+            const cSolic = req.usuario.conjunto?.toString() || req.usuario.conjuntoId?.toString();
+            const cVis = visitante.conjunto?.toString();
+            if (cSolic && cVis && cSolic !== cVis) {
+                return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
+            }
+        }
+
+        if (visitante.estado === 'ingresado') {
+            return res.status(400).json({ success: false, error: "El visitante ya está dentro" });
+        }
+
+        visitante.estado = 'ingresado';
+        await visitante.save();
+
+        await HistorialAcceso.create({
+            conjunto: visitante.conjunto,
+            placa: visitante.placaVehiculo || 'SIN-PLACA',
+            tipoAcceso: 'entrada',
+            tipoUsuario: 'visitante',
+            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
+            metodo: 'manual_porteria',
+            fechaHora: new Date()
+        });
+
+        res.json({ success: true, mensaje: `Ingreso registrado para ${visitante.nombre} ${visitante.apellido}` });
+    } catch (error) {
+        logger.error("Error registrando ingreso:", error);
+        res.status(500).json({ success: false, error: "Error registrando ingreso" });
+    }
+});
+
+// =======================================================
+// 📌 PORTERIA - Registrar salida del visitante por ID
+// =======================================================
+router.post("/:visitanteId/registrar-salida", verificarToken, esPorteriaOAdmin, async (req, res) => {
+    try {
+        const HistorialAcceso = require("../../shared/models/historialAcceso");
+        const { visitanteId } = req.params;
+        const visitante = await Visitante.findById(visitanteId);
+        if (!visitante) return res.status(404).json({ success: false, error: "Visitante no encontrado" });
+
+        if (req.usuario && req.usuario.rol !== 'superadmin') {
+            const cSolic = req.usuario.conjunto?.toString() || req.usuario.conjuntoId?.toString();
+            const cVis = visitante.conjunto?.toString();
+            if (cSolic && cVis && cSolic !== cVis) {
+                return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
+            }
+        }
+
+        if (visitante.estado === 'salido') {
+            return res.status(400).json({ success: false, error: "El visitante ya salió" });
+        }
+
+        visitante.estado = 'salido';
+        await visitante.save();
+
+        await HistorialAcceso.create({
+            conjunto: visitante.conjunto,
+            placa: visitante.placaVehiculo || 'SIN-PLACA',
+            tipoAcceso: 'salida',
+            tipoUsuario: 'visitante',
+            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
+            metodo: 'manual_porteria',
+            fechaHora: new Date()
+        });
+
+        res.json({ success: true, mensaje: `Salida registrada para ${visitante.nombre} ${visitante.apellido}` });
+    } catch (error) {
+        logger.error("Error registrando salida:", error);
+        res.status(500).json({ success: false, error: "Error registrando salida" });
+    }
+});
+
+// =======================================================
 // 📌 QR - Marcar ingreso del visitante
 // =======================================================
 router.post("/qr/ingreso/:token", async (req, res) => {

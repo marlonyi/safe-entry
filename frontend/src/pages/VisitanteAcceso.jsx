@@ -111,17 +111,18 @@ export default function VisitanteAcceso({ onBack }) {
       <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl relative z-10 overflow-hidden border border-slate-100">
         {/* Header */}
         <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 pb-10 text-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10">
+          <div className="absolute inset-0 opacity-10 pointer-events-none">
             <Shield size={200} className="absolute -right-10 -bottom-12 rotate-12" />
           </div>
           <button
+            type="button"
             onClick={onBack}
-            className="flex items-center gap-2 text-emerald-100 hover:text-white transition mb-4 text-sm font-medium group"
+            className="relative z-10 flex items-center gap-2 text-emerald-100 hover:text-white transition mb-4 text-sm font-medium group cursor-pointer"
           >
             <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
             Volver al inicio
           </button>
-          <div className="flex items-center gap-3 mb-3">
+          <div className="relative z-10 flex items-center gap-3 mb-3">
             <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
               <Fingerprint size={26} className="text-white" />
             </div>
@@ -233,7 +234,7 @@ export default function VisitanteAcceso({ onBack }) {
         <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl relative z-10 overflow-hidden border border-slate-100">
           {/* Header éxito */}
           <div className="bg-gradient-to-br from-emerald-500 to-green-600 p-6 text-white text-center relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10">
+            <div className="absolute inset-0 opacity-10 pointer-events-none">
               <CheckCircle2 size={200} className="absolute -right-10 -top-10" />
             </div>
             <div className="relative z-10">

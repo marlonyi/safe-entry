@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
 import api from '../services/api';
+import Logo from '../components/Logo';
 
 export default function AdminDashboard({ user }) {
   const [loading, setLoading] = useState(true);
@@ -222,38 +223,7 @@ export default function AdminDashboard({ user }) {
     <div className="relative">
       {/* Power BI Dashboard */}
       {POWERBI_EMBED_URL ? (
-        <div className="space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-2xl blur-xl opacity-40 animate-pulse" />
-                <div className="relative p-3 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 shadow-lg shadow-blue-500/30">
-                  <BarChart3 size={28} className="text-white" />
-                </div>
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold bg-gradient-to-r from-slate-800 via-blue-800 to-indigo-800 bg-clip-text text-transparent">
-                  Dashboard Analítico
-                </h1>
-                <p className="text-slate-500 text-sm">Visualizaciones en tiempo real • Power BI</p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 shadow-sm">
-                <div className="relative">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                  <div className="absolute inset-0 w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
-                </div>
-                <span className="text-sm font-semibold text-emerald-700">En vivo</span>
-              </div>
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white border border-slate-200 shadow-sm">
-                <Clock size={14} className="text-slate-500" />
-                <span className="text-sm text-slate-600">{new Date().toLocaleTimeString()}</span>
-              </div>
-            </div>
-          </div>
-
+        <div className="space-y-4">
           {/* Power BI Container with Premium Design */}
           <div className="relative group">
             {/* Animated Gradient Border */}
@@ -642,18 +612,7 @@ export default function AdminDashboard({ user }) {
 
         {/* Logo */}
         <div className="relative p-6 border-b border-white/10">
-          <div className="flex items-center gap-4">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-2xl blur-lg opacity-50 animate-pulse" />
-              <div className="relative w-12 h-12 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-500/30">
-                <ShieldCheck size={26} className="text-white" />
-              </div>
-            </div>
-            <div>
-              <p className="font-bold text-xl text-white tracking-wide">SafeEntry</p>
-              <p className="text-xs text-slate-400">Admin Dashboard</p>
-            </div>
-          </div>
+          <Logo theme="dark" subtitle="Admin Dashboard" />
         </div>
 
         {/* Navigation */}
@@ -712,8 +671,17 @@ export default function AdminDashboard({ user }) {
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {view === 'dashboard' && (
+                <div className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm">
+                  <Clock size={13} className="text-slate-500" />
+                  <span className="text-xs text-slate-600 font-mono">{new Date().toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              )}
               <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-slate-100 to-slate-50 border border-slate-200 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                <div className="relative">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                  <div className="absolute inset-0 w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                </div>
                 <span className="text-sm font-medium text-slate-700">Sistema Activo</span>
               </div>
               <div className="px-4 py-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 text-white font-medium flex items-center gap-2 shadow-lg shadow-blue-500/30">

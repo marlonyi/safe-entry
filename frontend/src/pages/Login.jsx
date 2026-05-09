@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff, ShieldCheck, Fingerprint, ArrowRight, AlertCircle } from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ShieldCheck, Fingerprint, ArrowRight, AlertCircle, Camera, QrCode, BarChart3, Bell } from 'lucide-react';
 import api from '../services/api';
+import Logo from '../components/Logo';
 
 export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
   const [showPassword, setShowPassword] = useState(false);
@@ -55,11 +56,8 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
         {/* Lado Izquierdo: Formulario */}
         <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-center">
           <div className="mb-10 text-center lg:text-left">
-            <div className="flex items-center justify-center lg:justify-start gap-3 mb-6">
-              <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-indigo-600 rounded-xl flex items-center justify-center text-white font-bold text-2xl shadow-lg shadow-blue-200">
-                S
-              </div>
-              <span className="font-extrabold text-2xl text-slate-800 tracking-tight">SafeEntry</span>
+            <div className="flex justify-center lg:justify-start mb-6">
+              <Logo variant="default" theme="light" subtitle="Control inteligente y acceso seguro" />
             </div>
             <h1 className="text-3xl font-bold text-slate-900 mb-2">Bienvenido de nuevo</h1>
             <p className="text-slate-500 text-sm">Ingresa tus credenciales para acceder a tu ecosistema residencial</p>
@@ -157,35 +155,61 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
           </div>
         </div>
 
-        {/* Lado Derecho: Imagen y Branding */}
-        <div className="hidden lg:flex w-1/2 bg-slate-900 border-l border-slate-800 flex-col p-12 relative overflow-hidden justify-between">
-            <div className="absolute inset-0 z-0 opacity-20">
-               <img src="https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?q=80&w=1000&auto=format&fit=crop" className="w-full h-full object-cover" alt="Building" />
-               <div className="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/80 to-transparent"></div>
+        {/* Lado Derecho: Branding + Features */}
+        <div className="hidden lg:flex w-1/2 flex-col p-12 relative overflow-hidden justify-center gap-10 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
+            {/* Patrón de fondo decorativo */}
+            <div className="absolute inset-0 z-0 pointer-events-none">
+              <div className="absolute -top-20 -right-20 w-80 h-80 bg-blue-500 rounded-full blur-3xl opacity-20" />
+              <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-indigo-500 rounded-full blur-3xl opacity-20" />
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600 rounded-full blur-3xl opacity-10" />
+              {/* Grid sutil */}
+              <div
+                className="absolute inset-0 opacity-[0.03]"
+                style={{
+                  backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)',
+                  backgroundSize: '40px 40px'
+                }}
+              />
             </div>
 
-            <div className="relative z-10 flex justify-end">
-               <span className="px-4 py-1.5 bg-white/10 backdrop-blur border border-white/10 rounded-full text-white text-xs font-semibold tracking-wide uppercase flex items-center gap-2">
-                  <Fingerprint size={14} className="text-blue-400"/> LPR + QR System
-               </span>
-            </div>
-
-            <div className="relative z-10 space-y-6">
-               <ShieldCheck size={48} className="text-blue-500 mb-4" />
-               <h2 className="text-4xl font-bold text-white leading-tight">Seguridad Inteligente <br/>para tu Conjunto.</h2>
+            {/* Logo + Hero text */}
+            <div className="relative z-10 space-y-7">
+               <div className="mb-2">
+                  <Logo variant="hero" theme="dark" subtitle="Control inteligente y acceso seguro" />
+               </div>
+               <h2 className="text-4xl font-bold text-white leading-tight">
+                 Seguridad <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Inteligente</span><br/>para tu Conjunto.
+               </h2>
                <p className="text-slate-400 text-sm leading-relaxed max-w-md">
                  Control de acceso vehicular con cámara de IA (YOLOv8), gestión de residentes, auditoría forense y accesos QR, todo acoplado en una misma plataforma.
-               </p>          
-               <div className="flex gap-4 items-center pt-4">
-                  <div className="flex -space-x-3">
-                    <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://ui-avatars.com/api/?name=J+S&background=10b981&color=fff" alt="User 1"/>
-                    <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://ui-avatars.com/api/?name=L+M&background=0284c7&color=fff" alt="User 2"/>
-                    <img className="w-10 h-10 rounded-full border-2 border-slate-900" src="https://ui-avatars.com/api/?name=P+R&background=f59e0b&color=fff" alt="User 3"/>
-                  </div>
-                  <div className="text-xs text-slate-300 font-medium">
-                    +2,000 residentes<br/><span>utilizan el sistema activo</span>
-                  </div>
+               </p>
+
+               {/* Feature pills */}
+               <div className="grid grid-cols-2 gap-3 pt-2 max-w-md">
+                 {[
+                   { icon: Camera, label: 'Cámara IA · YOLOv8', color: 'from-blue-500 to-cyan-500' },
+                   { icon: QrCode, label: 'Accesos QR dinámicos', color: 'from-emerald-500 to-teal-500' },
+                   { icon: BarChart3, label: 'Dashboard Power BI', color: 'from-purple-500 to-fuchsia-500' },
+                   { icon: Bell, label: 'Alertas en tiempo real', color: 'from-orange-500 to-amber-500' }
+                 ].map((f, i) => (
+                   <div key={i} className="flex items-center gap-2.5 px-3.5 py-2.5 bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-xl hover:bg-white/[0.06] transition-all">
+                     <div className={`p-1.5 rounded-lg bg-gradient-to-br ${f.color} shadow-lg`}>
+                       <f.icon size={14} className="text-white" />
+                     </div>
+                     <span className="text-xs text-slate-200 font-medium">{f.label}</span>
+                   </div>
+                 ))}
                </div>
+            </div>
+
+            {/* Footer */}
+            <div className="relative z-10 pt-6 mt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
+              <span className="font-medium">© {new Date().getFullYear()} SafeEntry</span>
+              <div className="flex items-center gap-4">
+                <a href="#" className="hover:text-slate-300 transition">Soporte</a>
+                <a href="#" className="hover:text-slate-300 transition">Términos</a>
+                <a href="#" className="hover:text-slate-300 transition">Privacidad</a>
+              </div>
             </div>
         </div>
 

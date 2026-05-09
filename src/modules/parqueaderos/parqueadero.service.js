@@ -259,17 +259,20 @@ const obtenerEstadisticasHistorial = async (tenantFilter, opciones = {}) => {
 
     const inicioHoy = new Date();
     inicioHoy.setHours(0, 0, 0, 0);
+    const filtroHoy = { ...filtro, fechaHora: { ...(filtro.fechaHora || {}), $gte: inicioHoy } };
 
-    const [total, entradas, salidas, residentes, visitantes, hoy] = await Promise.all([
+    const [total, entradas, salidas, residentes, visitantes, hoy, entradasHoy, salidasHoy] = await Promise.all([
         HistorialAcceso.countDocuments(filtro),
         HistorialAcceso.countDocuments({ ...filtro, tipoAcceso: 'entrada' }),
         HistorialAcceso.countDocuments({ ...filtro, tipoAcceso: 'salida' }),
         HistorialAcceso.countDocuments({ ...filtro, tipoUsuario: 'residente' }),
         HistorialAcceso.countDocuments({ ...filtro, tipoUsuario: 'visitante' }),
-        HistorialAcceso.countDocuments({ ...filtro, fechaHora: { $gte: inicioHoy } })
+        HistorialAcceso.countDocuments(filtroHoy),
+        HistorialAcceso.countDocuments({ ...filtroHoy, tipoAcceso: 'entrada' }),
+        HistorialAcceso.countDocuments({ ...filtroHoy, tipoAcceso: 'salida' })
     ]);
 
-    return { total, entradas, salidas, residentes, visitantes, hoy };
+    return { total, entradas, salidas, residentes, visitantes, hoy, entradasHoy, salidasHoy };
 };
 
 const registrarSalida = async (plazaId, tenantFilter) => {
