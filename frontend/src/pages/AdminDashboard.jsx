@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Trash2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
+import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
 import api from '../services/api';
 
 export default function AdminDashboard({ user }) {
@@ -515,11 +515,6 @@ export default function AdminDashboard({ user }) {
                         <button onClick={() => handleEditarUsuario(u)} className="p-2 rounded-lg bg-slate-100 hover:bg-blue-100 text-slate-600 hover:text-blue-600 transition-all duration-200 hover:scale-110" title="Editar">
                           <Edit2 size={16} />
                         </button>
-                        {(user?.rol === 'superadmin' || user?.rol === 'admin') && u.rol !== 'superadmin' && (
-                          <button onClick={() => handleEliminarUsuario(u)} className="p-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-500 hover:text-red-600 transition-all duration-200 hover:scale-110" title="Eliminar">
-                            <Trash2 size={16} />
-                          </button>
-                        )}
                       </div>
                     </td>
                   </tr>
