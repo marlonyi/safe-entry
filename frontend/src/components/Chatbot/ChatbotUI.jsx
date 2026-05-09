@@ -70,7 +70,7 @@ const ChatbotUI = () => {
   };
 
   return (
-    <div className="fixed bottom-6 left-6 z-[100] flex flex-col items-start">
+    <div className="fixed bottom-28 left-6 z-[100] flex flex-col items-start">
       {isOpen && (
         <div className="mb-4 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[500px] animate-in slide-in-from-bottom-5 fade-in duration-300">
           {/* Header */}
