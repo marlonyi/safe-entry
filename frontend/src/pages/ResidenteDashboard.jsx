@@ -496,6 +496,19 @@ export default function ResidenteDashboard({ user }) {
             <Car size={22} /><span className="hidden lg:block">Mi Vehículo</span>
           </button>
         </nav>
+
+        {/* Perfil del usuario al fondo del sidebar */}
+        <div className="p-4 border-t border-slate-100">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md shrink-0">
+              {user?.nombre?.charAt(0) || 'R'}
+            </div>
+            <div className="flex-1 min-w-0 hidden lg:block">
+              <p className="text-sm font-semibold text-slate-800 truncate">{user?.nombre || 'Residente'}</p>
+              <p className="text-xs text-slate-500 capitalize">{user?.rol || 'residente'}</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 md:ml-20 lg:ml-64 p-4 lg:p-8">

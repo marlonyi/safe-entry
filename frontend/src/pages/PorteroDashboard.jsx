@@ -396,6 +396,19 @@ export default function PorteroDashboard({ user }) {
             <Car size={22} /><span className="hidden lg:block">Parqueaderos</span>
           </button>
         </nav>
+
+        {/* Perfil del usuario al fondo del sidebar */}
+        <div className="p-4 border-t border-white/10">
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shrink-0">
+              {user?.nombre?.charAt(0) || 'P'}
+            </div>
+            <div className="flex-1 min-w-0 hidden lg:block">
+              <p className="text-sm font-semibold text-white truncate">{user?.nombre || 'Portero'}</p>
+              <p className="text-xs text-slate-400 capitalize">{user?.rol || 'porteria'}</p>
+            </div>
+          </div>
+        </div>
       </aside>
 
       <main className="flex-1 md:ml-20 lg:ml-64 p-4 lg:p-8">

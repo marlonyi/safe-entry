@@ -246,15 +246,45 @@ exports.loginUsuario = async (req, res) => {
             });
         }
 
+        // ========== ATAJO: SI HAY UN SUPERADMIN Y LA CONTRASEÑA COINCIDE, ENTRAR DIRECTO ==========
+        // El superadmin no pertenece a un conjunto, así que no tiene sentido pedirle elegir uno.
+        // Solo si la password no coincide con la del superadmin, pasamos a la lógica multi-conjunto.
+        if (!conjuntoId) {
+            const superadminMatch = usuarios.find(u => u.rol === 'superadmin');
+            if (superadminMatch) {
+                const passwordOkSuper = await bcrypt.compare(password, superadminMatch.password);
+                if (passwordOkSuper) {
+                    // Saltar directo al flujo de login normal usando este usuario
+                    const { accessToken, refreshToken } = generateTokens({
+                        id: superadminMatch._id.toString(),
+                        rol: 'superadmin',
+                        conjuntoId: null
+                    });
+                    resetLoginAttempts(req);
+                    await audit.loginSuccess(req, { id: superadminMatch._id, nombre: superadminMatch.nombre, cedula: superadminMatch.cedula, rol: 'superadmin' });
+                    return successResponse(res, {
+                        token: accessToken,
+                        refreshToken,
+                        expiresIn: 7200,
+                        usuario: {
+                            id: superadminMatch._id,
+                            nombre: superadminMatch.nombre,
+                            apellido: superadminMatch.apellido,
+                            cedula: superadminMatch.cedula,
+                            rol: 'superadmin'
+                        }
+                    }, "Login exitoso");
+                }
+            }
+        }
+
         // ========== MANEJO DE MÚLTIPLES CONJUNTOS ==========
         // Si hay múltiples usuarios con la misma cédula en diferentes conjuntos
         if (usuarios.length > 1 && !conjuntoId) {
-            // Si no se especificó conjunto, devolver lista para que el usuario elija
+            // Filtramos el superadmin del picker (ya intentamos login directo arriba)
             const conjuntosDisponibles = usuarios
+                .filter(u => u.rol !== 'superadmin')
                 .map(u => {
-                    if (u.rol === 'superadmin') {
-                         return { conjuntoId: 'superadmin', conjuntoNombre: 'Panel de Control (SuperAdmin)' };
-                    }
                     if (u.conjunto && u.conjunto.estado === 'activo') {
                          return { conjuntoId: u.conjunto._id.toString(), conjuntoNombre: u.conjunto.nombre };
                     }
@@ -266,11 +296,30 @@ exports.loginUsuario = async (req, res) => {
                 return errorResponse(res, "No hay conjuntos activos para este usuario", 400);
             }
 
-            return res.status(300).json({
-                mensaje: "Seleccione el perfil al que desea ingresar",
-                conjuntos: conjuntosDisponibles,
-                requiereSeleccion: true
-            });
+            // Si después de filtrar superadmin queda solo 1, login directo a ese
+            if (conjuntosDisponibles.length === 1) {
+                const unicoUsuario = usuarios.find(u =>
+                    u.rol !== 'superadmin' &&
+                    u.conjunto && u.conjunto._id.toString() === conjuntosDisponibles[0].conjuntoId
+                );
+                if (unicoUsuario) {
+                    // Continúa al flujo normal con este usuario seleccionado
+                    usuarios.length = 0;
+                    usuarios.push(unicoUsuario);
+                } else {
+                    return res.status(300).json({
+                        mensaje: "Seleccione el perfil al que desea ingresar",
+                        conjuntos: conjuntosDisponibles,
+                        requiereSeleccion: true
+                    });
+                }
+            } else {
+                return res.status(300).json({
+                    mensaje: "Seleccione el perfil al que desea ingresar",
+                    conjuntos: conjuntosDisponibles,
+                    requiereSeleccion: true
+                });
+            }
         }
 
         // Seleccionar el usuario correcto

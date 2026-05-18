@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
+import Pagination from '../components/Pagination';
 
 export default function AdminDashboard({ user }) {
   const [loading, setLoading] = useState(true);
@@ -18,6 +19,12 @@ export default function AdminDashboard({ user }) {
   const [conjuntoSeleccionado, setConjuntoSeleccionado] = useState(null);
   const [usuariosConjuntoFilter, setUsuariosConjuntoFilter] = useState('todos');
   const [visitantesConjuntoFilter, setVisitantesConjuntoFilter] = useState('todos');
+
+  // 📄 Paginación frontend (listas grandes)
+  const [usuariosPage, setUsuariosPage] = useState(1);
+  const [usuariosPageSize, setUsuariosPageSize] = useState(10);
+  const [visitantesPage, setVisitantesPage] = useState(1);
+  const [visitantesPageSize, setVisitantesPageSize] = useState(10);
   const [parkData, setParkData] = useState(null);
   const [parkStats, setParkStats] = useState(null);
 
@@ -353,23 +360,29 @@ export default function AdminDashboard({ user }) {
   );
 
   const renderUsuarios = () => {
-    const usuariosFiltrados = (usuarios || []).filter(u => {
+    // Esta vista gestiona "Residentes y Personal" de los conjuntos.
+    // Los superadmins son a nivel de sistema y no aplican aquí, así que se excluyen.
+    const usuariosBase = (usuarios || []).filter(u => u.rol !== 'superadmin');
+
+    const usuariosFiltrados = usuariosBase.filter(u => {
       if (usuariosConjuntoFilter === 'todos') return true;
-      if (usuariosConjuntoFilter === 'sin-conjunto') return !u.conjunto;
       const cId = typeof u.conjunto === 'object' ? u.conjunto?._id : u.conjunto;
       return cId === usuariosConjuntoFilter;
     });
 
+    // Slice según paginación
+    const usuariosPaginados = usuariosFiltrados.slice(
+      (usuariosPage - 1) * usuariosPageSize,
+      usuariosPage * usuariosPageSize
+    );
+
     const contarPorConjunto = (cId) => {
-      if (cId === 'todos') return (usuarios || []).length;
-      if (cId === 'sin-conjunto') return (usuarios || []).filter(u => !u.conjunto).length;
-      return (usuarios || []).filter(u => {
+      if (cId === 'todos') return usuariosBase.length;
+      return usuariosBase.filter(u => {
         const id = typeof u.conjunto === 'object' ? u.conjunto?._id : u.conjunto;
         return id === cId;
       }).length;
     };
-
-    const haySinConjunto = (usuarios || []).some(u => !u.conjunto);
 
     return (
       <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100">
@@ -400,7 +413,7 @@ export default function AdminDashboard({ user }) {
             <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filtrar por conjunto</p>
             <div className="flex flex-wrap gap-2">
               <button
-                onClick={() => setUsuariosConjuntoFilter('todos')}
+                onClick={() => { setUsuariosConjuntoFilter('todos'); setUsuariosPage(1); }}
                 className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
                   usuariosConjuntoFilter === 'todos'
                     ? 'bg-gradient-to-r from-slate-700 to-slate-900 text-white shadow-lg scale-105'
@@ -417,7 +430,7 @@ export default function AdminDashboard({ user }) {
               {conjuntos.map(c => (
                 <button
                   key={c._id}
-                  onClick={() => setUsuariosConjuntoFilter(c._id)}
+                  onClick={() => { setUsuariosConjuntoFilter(c._id); setUsuariosPage(1); }}
                   className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
                     usuariosConjuntoFilter === c._id
                       ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg scale-105'
@@ -432,23 +445,6 @@ export default function AdminDashboard({ user }) {
                   </span>
                 </button>
               ))}
-              {haySinConjunto && (
-                <button
-                  onClick={() => setUsuariosConjuntoFilter('sin-conjunto')}
-                  className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
-                    usuariosConjuntoFilter === 'sin-conjunto'
-                      ? 'bg-gradient-to-r from-purple-500 to-violet-500 text-white shadow-lg scale-105'
-                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                  }`}
-                >
-                  Sin conjunto (Superadmin)
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    usuariosConjuntoFilter === 'sin-conjunto' ? 'bg-white/20' : 'bg-slate-200'
-                  }`}>
-                    {contarPorConjunto('sin-conjunto')}
-                  </span>
-                </button>
-              )}
             </div>
           </div>
 
@@ -470,7 +466,7 @@ export default function AdminDashboard({ user }) {
                       No hay usuarios en este conjunto.
                     </td>
                   </tr>
-                ) : usuariosFiltrados.map((u, i) => (
+                ) : usuariosPaginados.map((u, i) => (
                   <tr key={u._id || i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-blue-50 hover:to-transparent transition-all duration-200">
                     <td className="p-4 font-medium text-slate-800">{u.nombre} {u.apellido}</td>
                     <td className="p-4 text-slate-600">{u.cedula}</td>
@@ -492,6 +488,14 @@ export default function AdminDashboard({ user }) {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={usuariosPage}
+            totalItems={usuariosFiltrados.length}
+            pageSize={usuariosPageSize}
+            onPageChange={setUsuariosPage}
+            onPageSizeChange={(s) => { setUsuariosPageSize(s); setUsuariosPage(1); }}
+          />
         </div>
       </div>
     );
@@ -514,6 +518,10 @@ export default function AdminDashboard({ user }) {
             const cId = typeof v.conjunto === 'object' ? v.conjunto?._id : v.conjunto;
             return cId === visitantesConjuntoFilter;
           });
+          const visitantesPaginados = visitantesFiltrados.slice(
+            (visitantesPage - 1) * visitantesPageSize,
+            visitantesPage * visitantesPageSize
+          );
           const contar = (cId) => {
             if (cId === 'todos') return (visitantes || []).length;
             return (visitantes || []).filter(v => {
@@ -528,7 +536,7 @@ export default function AdminDashboard({ user }) {
                 <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-2">Filtrar por conjunto</p>
                 <div className="flex flex-wrap gap-2">
                   <button
-                    onClick={() => setVisitantesConjuntoFilter('todos')}
+                    onClick={() => { setVisitantesConjuntoFilter('todos'); setVisitantesPage(1); }}
                     className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
                       visitantesConjuntoFilter === 'todos'
                         ? 'bg-gradient-to-r from-slate-700 to-slate-900 text-white shadow-lg scale-105'
@@ -545,7 +553,7 @@ export default function AdminDashboard({ user }) {
                   {conjuntos.map(c => (
                     <button
                       key={c._id}
-                      onClick={() => setVisitantesConjuntoFilter(c._id)}
+                      onClick={() => { setVisitantesConjuntoFilter(c._id); setVisitantesPage(1); }}
                       className={`px-4 py-2 rounded-xl font-semibold text-sm transition-all duration-300 flex items-center gap-2 ${
                         visitantesConjuntoFilter === c._id
                           ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-lg scale-105'
@@ -577,7 +585,7 @@ export default function AdminDashboard({ user }) {
                   <tbody>
                     {visitantesFiltrados.length === 0 ? (
                       <tr><td colSpan="5" className="text-center p-8 text-slate-400">No hay visitantes en este conjunto</td></tr>
-                    ) : visitantesFiltrados.map((v, i) => (
+                    ) : visitantesPaginados.map((v, i) => (
                       <tr key={v._id || i} className="border-b border-slate-100 hover:bg-gradient-to-r hover:from-emerald-50 hover:to-transparent transition-all duration-200">
                         <td className="p-4 font-medium text-slate-800">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
                         <td className="p-4 text-slate-600">{v.cedulaVisitante || v.cedula}</td>
@@ -593,6 +601,14 @@ export default function AdminDashboard({ user }) {
                   </tbody>
                 </table>
               </div>
+
+              <Pagination
+                currentPage={visitantesPage}
+                totalItems={visitantesFiltrados.length}
+                pageSize={visitantesPageSize}
+                onPageChange={setVisitantesPage}
+                onPageSizeChange={(s) => { setVisitantesPageSize(s); setVisitantesPage(1); }}
+              />
             </>
           );
         })()}
@@ -729,7 +745,12 @@ export default function AdminDashboard({ user }) {
 
               <div className="relative overflow-hidden rounded-2xl bg-white shadow-xl border border-slate-100 p-6">
                 {(() => {
-                  const conjuntosList = parkData?.conjuntos || [];
+                  // Excluimos la entrada "Sin conjunto" porque los parqueaderos sin conjunto
+                  // son inconsistencias de datos, no un conjunto real a gestionar.
+                  const conjuntosList = (parkData?.conjuntos || []).filter(c => {
+                    const nombre = (c?.nombre || '').toLowerCase();
+                    return c?._id && nombre !== 'sin conjunto' && nombre !== 'sin-conjunto';
+                  });
                   const activeConjuntoId = conjuntoSeleccionado || conjuntosList[0]?._id;
                   const activeConjunto = conjuntosList.find(c => c._id === activeConjuntoId);
 
@@ -1019,44 +1040,13 @@ export default function AdminDashboard({ user }) {
                     </div>
                   )}
 
-                  {/* Paginacion */}
-                  {audMeta.totalPages > 1 && (
-                    <div className="mt-4 flex items-center justify-between">
-                      <p className="text-sm text-slate-500">
-                        Página {audPage} de {audMeta.totalPages}
-                      </p>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => setAudPage(1)}
-                          disabled={audPage === 1}
-                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ⟪
-                        </button>
-                        <button
-                          onClick={() => setAudPage(p => Math.max(1, p - 1))}
-                          disabled={audPage === 1}
-                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ‹ Anterior
-                        </button>
-                        <button
-                          onClick={() => setAudPage(p => Math.min(audMeta.totalPages, p + 1))}
-                          disabled={audPage >= audMeta.totalPages}
-                          className="px-3 py-1.5 text-sm rounded-lg bg-orange-500 text-white hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          Siguiente ›
-                        </button>
-                        <button
-                          onClick={() => setAudPage(audMeta.totalPages)}
-                          disabled={audPage >= audMeta.totalPages}
-                          className="px-3 py-1.5 text-sm rounded-lg bg-slate-100 hover:bg-slate-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          ⟫
-                        </button>
-                      </div>
-                    </div>
-                  )}
+                  {/* Paginación unificada */}
+                  <Pagination
+                    currentPage={audPage}
+                    totalItems={audMeta.total || 0}
+                    pageSize={audLimit}
+                    onPageChange={setAudPage}
+                  />
                 </div>
               </div>
             </div>

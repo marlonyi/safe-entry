@@ -73,18 +73,13 @@ function App() {
 
   return (
     <div className="relative">
-      {/* Componente Flotante para Logout (Solo para demostración/navegación) */}
-      <div className="fixed bottom-6 right-6 z-[100] flex flex-col items-end gap-2">
-         <div className="bg-slate-800 text-xs text-white px-3 py-1 rounded-full shadow-lg opacity-80 mb-1 pointer-events-none">
-           Sesión actual: {user?.nombre || ''} ({role})
-         </div>
-         <button
-           onClick={handleLogout}
-           className="bg-slate-900/90 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold shadow-xl border border-slate-700 hover:bg-red-600 transition-colors"
-         >
-            Cerrar Sesión
-         </button>
-      </div>
+      {/* Botón flotante de Cerrar Sesión */}
+      <button
+        onClick={handleLogout}
+        className="fixed bottom-6 right-6 z-[100] bg-slate-900/90 backdrop-blur text-white px-4 py-2 rounded-full text-xs font-bold shadow-xl border border-slate-700 hover:bg-red-600 transition-colors"
+      >
+        Cerrar Sesión
+      </button>
 
       {/* Chatbot Global Component */}
       <ChatbotUI />
