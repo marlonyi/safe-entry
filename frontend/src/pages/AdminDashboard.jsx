@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3 } from 'lucide-react';
+import { Users, Car, UserCheck, ShieldCheck, Activity, Edit2, Plus, Building, UserPlus, Video, QrCode, X, Clock, BarChart3, Calculator } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
 import Pagination from '../components/Pagination';
+import ModeloMatematico from '../components/ModeloMatematico';
 
 export default function AdminDashboard({ user }) {
   const [loading, setLoading] = useState(true);
@@ -235,6 +236,7 @@ export default function AdminDashboard({ user }) {
     { id: 'visitantes', label: 'Visitantes', icon: UserCheck },
     { id: 'parqueaderos', label: 'Parqueaderos', icon: Car },
     { id: 'auditoria', label: 'Auditoría / Accesos', icon: Activity },
+    { id: 'modelo', label: 'Modelo Matemático', icon: Calculator },
     { id: 'simulador', label: 'Simulador Cámaras', icon: Video }
   ];
 
@@ -1099,6 +1101,8 @@ export default function AdminDashboard({ user }) {
               </div>
             </div>
           )}
+
+          {view === 'modelo' && <ModeloMatematico />}
 
           {view === 'simulador' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

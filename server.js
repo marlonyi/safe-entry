@@ -148,6 +148,7 @@ app.use('/api/conjuntos', conjuntoRoutes); // 🏢 Rutas de gestión de conjunto
 app.use('/api/telemetria', require('./src/modules/telemetria/telemetria.routes'));
 app.use('/api/scripts', require('./src/modules/telemetria/scripts.routes')); // 📡 Telemetría on-premise
 app.use('/api/chat', require('./src/modules/chatbot/chatbot.routes')); // 🤖 Chatbot Groq AI
+app.use('/api/modelo', require('./src/modules/modelo/modelo.routes')); // 📐 Modelo de Programación Lineal
 
 // ========================================
 // 💓 Health Check (para monitoreo)
