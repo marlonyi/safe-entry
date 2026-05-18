@@ -129,6 +129,66 @@ router.get("/qr/verificar/:token", async (req, res) => {
 });
 
 // =======================================================
+// 📌 QR - Verificar Y registrar ingreso (público, usado por script Python)
+// El token del QR actúa como autenticación: solo quien tiene el QR puede llamarlo.
+// =======================================================
+router.post("/qr/ingresar/:token", async (req, res) => {
+    try {
+        const HistorialAcceso = require("../../shared/models/historialAcceso");
+        const { token } = req.params;
+
+        const visitante = await Visitante.buscarPorQR(token);
+        if (!visitante) {
+            return res.status(404).json({ valid: false, error: "QR inválido o expirado" });
+        }
+
+        // Si ya está dentro, no registrar otra vez (idempotencia)
+        if (visitante.estado === 'ingresado') {
+            return res.json({
+                valid: true,
+                yaIngreso: true,
+                mensaje: `${visitante.nombre} ${visitante.apellido} ya se encuentra dentro`,
+                visitante: {
+                    id: visitante._id,
+                    nombre: visitante.nombre,
+                    apellido: visitante.apellido,
+                    placa: visitante.placaVehiculo,
+                    estado: visitante.estado
+                }
+            });
+        }
+
+        visitante.estado = 'ingresado';
+        await visitante.save();
+
+        await HistorialAcceso.create({
+            conjunto: visitante.conjunto,
+            placa: visitante.placaVehiculo || 'SIN-PLACA',
+            tipoAcceso: 'entrada',
+            tipoUsuario: 'visitante',
+            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
+            metodo: 'qr_scan',
+            fechaHora: new Date()
+        });
+
+        return res.json({
+            valid: true,
+            mensaje: `Ingreso registrado: ${visitante.nombre} ${visitante.apellido}`,
+            visitante: {
+                id: visitante._id,
+                nombre: visitante.nombre,
+                apellido: visitante.apellido,
+                placa: visitante.placaVehiculo,
+                estado: visitante.estado
+            }
+        });
+    } catch (error) {
+        logger.error("Error registrando ingreso por QR:", error);
+        return res.status(500).json({ valid: false, error: error.message });
+    }
+});
+
+// =======================================================
 // 📌 PORTERIA - Registrar entrada del visitante por ID
 // (cambia estado a 'ingresado' y crea HistorialAcceso)
 // =======================================================
@@ -196,6 +256,21 @@ router.post("/:visitanteId/registrar-salida", verificarToken, esPorteriaOAdmin, 
 
         visitante.estado = 'salido';
         await visitante.save();
+
+        // 🅿️ Liberar la plaza de parqueadero que tenía asignada
+        if (visitante.parqueadero) {
+            const plaza = await Parqueadero.findById(visitante.parqueadero);
+            if (plaza) {
+                plaza.estado = 'DISPONIBLE';
+                plaza.visitante = null;
+                plaza.horaAsignacion = null;
+                plaza.horaEntrada = null;
+                plaza.placaVehiculo = null;
+                await plaza.save();
+            }
+            visitante.parqueadero = null;
+            await visitante.save();
+        }
 
         await HistorialAcceso.create({
             conjunto: visitante.conjunto,

@@ -84,6 +84,9 @@ router.post("/conjunto/:conjuntoId/crear", verificarToken, esSuperAdmin, parquea
 // Body: { torres: ['A','B','C'...], pisos: 10, apartamentosPorPiso: 2, visitanteCarro: 20, visitanteMoto: 10 }
 router.post("/inicializar-conjunto/:conjuntoId", verificarToken, esSuperAdmin, parqueaderoController.inicializarConjunto);
 
+// 🏢 SUPERADMIN: Eliminar TODAS las plazas de un conjunto (para reinicializar)
+router.delete("/conjunto/:conjuntoId/plazas", verificarToken, esSuperAdmin, parqueaderoController.eliminarTodasLasPlazas);
+
 // 🏢 SUPERADMIN: Eliminar una plaza
 router.delete("/:id", verificarToken, esSuperAdmin, parqueaderoController.eliminarPlaza);
 

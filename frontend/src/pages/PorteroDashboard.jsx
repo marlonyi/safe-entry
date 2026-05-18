@@ -66,9 +66,10 @@ export default function PorteroDashboard({ user }) {
   };
 
   useEffect(() => {
-    const fetchData = async () => {
+    // `silent` evita el spinner cuando es un refresh automático
+    const fetchData = async (silent = false) => {
       try {
-        setLoading(true);
+        if (!silent) setLoading(true);
 
         // Parqueaderos (siempre)
         const parkResp = await api.get('/parqueaderos').catch(() => ({ data: { data: [] } }));
@@ -113,12 +114,25 @@ export default function PorteroDashboard({ user }) {
           alertas
         });
       } catch (error) {
-        console.error('Error al obtener datos en porteria', error);
+        if (!silent) console.error('Error al obtener datos en porteria', error);
       } finally {
-        setLoading(false);
+        if (!silent) setLoading(false);
       }
     };
+
+    // Carga inicial con spinner
     fetchData();
+
+    // 🔄 Auto-refresh cada 3 segundos para reflejar entradas/salidas
+    // hechas desde el escáner Python o desde otra sesión de portero
+    const intervalo = setInterval(() => {
+      // Solo refrescar si la pestaña está visible (ahorra batería y peticiones)
+      if (!document.hidden) {
+        fetchData(true);
+      }
+    }, 3000);
+
+    return () => clearInterval(intervalo);
   }, [view]);
 
   const cardClass = "bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition";
@@ -134,6 +148,7 @@ export default function PorteroDashboard({ user }) {
     ];
 
     const visitantesPend = visitantes.filter(v => v.estado === 'pendiente').slice(0, 5);
+    const visitantesDentro = visitantes.filter(v => v.estado === 'ingresado').slice(0, 5);
 
     return (
       <>
@@ -154,59 +169,109 @@ export default function PorteroDashboard({ user }) {
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Visitantes pendientes para validar */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100 lg:col-span-2">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Clock size={20} className="text-amber-600" />
-                Visitantes pendientes de ingreso
-              </h2>
-              <span className="text-xs text-slate-500">{stats.visitantesPendientes} en total</span>
+          {/* Columna izquierda: Pendientes + Dentro (apilados) */}
+          <div className="lg:col-span-2 space-y-6">
+
+            {/* Visitantes pendientes para validar */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Clock size={20} className="text-amber-600" />
+                  Visitantes pendientes de ingreso
+                </h2>
+                <span className="text-xs text-slate-500">{stats.visitantesPendientes} en total</span>
+              </div>
+              {visitantesPend.length === 0 ? (
+                <div className="h-32 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
+                  <UserCheck size={28} className="text-slate-300 mb-1" />
+                  <p className="text-slate-400 text-sm font-medium">No hay visitantes pendientes</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {visitantesPend.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100 hover:bg-amber-100 transition">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center font-bold shrink-0">
+                          {(v.nombre || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">{v.nombre} {v.apellido}</p>
+                          <p className="text-xs text-slate-500">
+                            Apto {v.apartamentoDestino || '-'} {v.torreDestino ? `· Torre ${v.torreDestino}` : ''}
+                            {v.motivoVisita ? ` · ${v.motivoVisita}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200">{v.placaVehiculo || 'sin placa'}</span>
+                        <button
+                          onClick={() => handleRegistrarIngreso(v)}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition"
+                          title="Registrar entrada"
+                        >
+                          <ArrowRightCircle size={14} /> Entrar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
-            {visitantesPend.length === 0 ? (
-              <div className="h-48 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
-                <UserCheck size={36} className="text-slate-300 mb-2" />
-                <p className="text-slate-400 font-medium">No hay visitantes pendientes</p>
+
+            {/* Visitantes dentro (para registrar salida) */}
+            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <UserCheck size={20} className="text-blue-600" />
+                  Visitantes dentro
+                </h2>
+                <span className="text-xs text-slate-500">{stats.visitantesDentro} en total</span>
               </div>
-            ) : (
-              <div className="space-y-2">
-                {visitantesPend.map((v, i) => (
-                  <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100 hover:bg-amber-100 transition">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center font-bold shrink-0">
-                        {(v.nombre || '?').charAt(0).toUpperCase()}
+              {visitantesDentro.length === 0 ? (
+                <div className="h-32 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
+                  <UserCheck size={28} className="text-slate-300 mb-1" />
+                  <p className="text-slate-400 text-sm font-medium">No hay visitantes dentro</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {visitantesDentro.map((v, i) => (
+                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100 hover:bg-blue-100 transition">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center font-bold shrink-0">
+                          {(v.nombre || '?').charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="font-semibold text-slate-800 truncate">{v.nombre} {v.apellido}</p>
+                          <p className="text-xs text-slate-500">
+                            Apto {v.apartamentoDestino || '-'} {v.torreDestino ? `· Torre ${v.torreDestino}` : ''}
+                          </p>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-semibold text-slate-800 truncate">{v.nombre} {v.apellido}</p>
-                        <p className="text-xs text-slate-500">
-                          Apto {v.apartamentoDestino || '-'} {v.torreDestino ? `· Torre ${v.torreDestino}` : ''}
-                          {v.motivoVisita ? ` · ${v.motivoVisita}` : ''}
-                        </p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200">{v.placaVehiculo || 'sin placa'}</span>
+                        <button
+                          onClick={() => handleRegistrarSalida(v)}
+                          className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition"
+                          title="Registrar salida"
+                        >
+                          <ArrowRightCircle size={14} className="rotate-180" /> Salir
+                        </button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200">{v.placaVehiculo || 'sin placa'}</span>
-                      <button
-                        onClick={() => handleRegistrarIngreso(v)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition"
-                        title="Registrar entrada"
-                      >
-                        <ArrowRightCircle size={14} /> Entrar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
+
           </div>
 
-          {/* Últimos accesos */}
+          {/* Columna derecha: Últimos accesos */}
           <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
             <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
               <ArrowRightCircle size={20} className="text-blue-600" />
               Últimos accesos
             </h2>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
               {historial.length === 0 ? (
                 <p className="text-sm text-slate-500 text-center py-4">No hay registros</p>
               ) : historial.slice(0, 8).map((item, i) => (

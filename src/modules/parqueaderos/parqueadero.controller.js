@@ -345,6 +345,29 @@ const obtenerPorTorre = async (req, res) => {
     }
 };
 
+// Eliminar TODAS las plazas de un conjunto (operación destructiva, solo superadmin)
+const eliminarTodasLasPlazas = async (req, res) => {
+    try {
+        const { conjuntoId } = req.params;
+        if (!conjuntoId) return errorResponse(res, "conjuntoId requerido", 400);
+
+        const resultado = await parqueaderoService.eliminarTodasLasPlazasDeConjunto(conjuntoId);
+
+        if (req.usuarioLogueado) {
+            await AuditLog.registrar({
+                usuario: req.usuarioLogueado,
+                accion: 'DELETE_ALL_PARKING',
+                descripcion: `Eliminó ${resultado.eliminadas} parqueaderos del conjunto ${conjuntoId}`
+            });
+        }
+
+        return successResponse(res, resultado, `${resultado.eliminadas} plazas eliminadas`);
+    } catch (error) {
+        logger.error('Error al eliminar plazas:', error.message);
+        return errorResponse(res, error.message, 500);
+    }
+};
+
 module.exports = {
     obtenerPlazas,
     obtenerEstadisticas,
@@ -364,5 +387,6 @@ module.exports = {
     asignarParqueaderoApartamento,
     liberarParqueaderoResidente,
     obtenerParqueaderoPorApartamento,
-    obtenerPorTorre
+    obtenerPorTorre,
+    eliminarTodasLasPlazas
 };

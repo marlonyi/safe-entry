@@ -5,6 +5,7 @@ const Parqueadero = require("./parqueadero.model");
 const HistorialAcceso = require("../../shared/models/historialAcceso");
 const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
+const Conjunto = require("../conjuntos/conjunto.model");
 
 const obtenerPlazas = async (tenantFilter, filtrosAdicionales = {}) => {
     const query = { ...tenantFilter, ...filtrosAdicionales };
@@ -471,6 +472,36 @@ const eliminarPlaza = async (plazaId, tenantFilter) => {
     return plaza;
 };
 
+// Borrar todos los parqueaderos de un conjunto (operación destructiva)
+const eliminarTodasLasPlazasDeConjunto = async (conjuntoId) => {
+    if (!conjuntoId) throw new Error("conjuntoId requerido");
+
+    const ids = await Parqueadero.find({ conjunto: conjuntoId }).distinct('_id');
+    if (ids.length === 0) {
+        return { eliminadas: 0, mensaje: "El conjunto no tenía parqueaderos" };
+    }
+
+    // Limpiar referencias en visitantes (parqueadero asignado)
+    const Visitante = require("../visitantes/visitante.model");
+    await Visitante.updateMany(
+        { parqueadero: { $in: ids } },
+        { $set: { parqueadero: null } }
+    );
+
+    // Limpiar referencias en usuarios (parqueaderoAsignado)
+    const Usuario = require("../usuarios/usuario.model");
+    await Usuario.updateMany(
+        { parqueaderoAsignado: { $in: ids } },
+        { $set: { parqueaderoAsignado: null } }
+    );
+
+    const resultado = await Parqueadero.deleteMany({ conjunto: conjuntoId });
+    return {
+        eliminadas: resultado.deletedCount,
+        mensaje: `Se eliminaron ${resultado.deletedCount} plazas del conjunto`
+    };
+};
+
 const editarPlaza = async (plazaId, datosActualizacion, tenantFilter) => {
     const plaza = await Parqueadero.findOne({ _id: plazaId, ...tenantFilter });
     if (!plaza) throw new Error("Plaza no encontrada o sin permisos");
@@ -669,6 +700,7 @@ const crearPlazasConfiguracion = async (conjuntoId, config) => {
         torres = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J'],
         pisos = 10,
         apartamentosPorPiso = 2,
+        residenteMoto = 0,        // Cantidad de plazas de moto para residentes (rotativas)
         visitanteCarro = 20,
         visitanteMoto = 10,
         tiempoMaximoHoras = 8
@@ -676,12 +708,11 @@ const crearPlazasConfiguracion = async (conjuntoId, config) => {
 
     const nuevasPlazas = [];
 
-    // Crear parqueaderos privados por cada apartamento
+    // Crear parqueaderos privados (CARRO) por cada apartamento
     for (const torre of torres) {
         for (let piso = 1; piso <= pisos; piso++) {
             for (let apto = 1; apto <= apartamentosPorPiso; apto++) {
                 // Número de apartamento: primer dígito = piso, segundo = apto
-                // Ej: Piso 1, Apto 1 → 101; Piso 3, Apto 2 → 302
                 const numeroApartamento = `${piso}0${apto}`;
                 const numeroParqueadero = `${torre}-${numeroApartamento}`;
 
@@ -696,6 +727,18 @@ const crearPlazasConfiguracion = async (conjuntoId, config) => {
                 });
             }
         }
+    }
+
+    // Crear plazas de MOTO para residentes (no van asociadas a un apto específico,
+    // se asignan después al residente que tenga moto)
+    for (let i = 1; i <= residenteMoto; i++) {
+        nuevasPlazas.push({
+            numero: `R-M-${i.toString().padStart(3, '0')}`,
+            estado: 'DISPONIBLE',
+            categoria: 'PRIVADO',
+            tipoVehiculo: 'MOTO',
+            conjunto: conjuntoId
+        });
     }
 
     // Crear parqueaderos de visitantes para carros
@@ -768,8 +811,34 @@ const obtenerParqueaderosPorTorre = async (tenantFilter) => {
             .sort((a, b) => (a.apartamento || '').localeCompare(b.apartamento || ''));
     }
 
-    // ===== Agrupacion por conjunto =====
+    // ===== Agrupación por conjunto =====
+    // Primero inicializamos TODOS los conjuntos activos (aunque no tengan parqueaderos)
+    // para que el frontend pueda mostrarlos como "0 plazas" en vez de ocultarlos.
     const conjuntosMap = {};
+
+    // Si el tenantFilter restringe a un conjunto específico, solo traemos ese.
+    // Si no hay filtro (superadmin), traemos todos los activos.
+    const filtroConjuntos = { estado: 'activo' };
+    if (tenantFilter && tenantFilter.conjunto) {
+        filtroConjuntos._id = tenantFilter.conjunto;
+    }
+    const conjuntosActivos = await Conjunto.find(filtroConjuntos)
+        .select('_id nombre')
+        .lean();
+
+    for (const c of conjuntosActivos) {
+        const cId = c._id.toString();
+        conjuntosMap[cId] = {
+            _id: cId,
+            nombre: c.nombre,
+            privadosCarro: [],
+            privadosMoto: [],
+            visitantesCarro: [],
+            visitantesMoto: []
+        };
+    }
+
+    // Ahora llenamos con los parqueaderos existentes
     for (const p of parqueaderos) {
         const cId = p.conjunto?._id?.toString() || 'sin-conjunto';
         if (!conjuntosMap[cId]) {
@@ -814,6 +883,7 @@ module.exports = {
     crearPlazasConjunto,
     crearPlazasConfiguracion,
     eliminarPlaza,
+    eliminarTodasLasPlazasDeConjunto,
     editarPlaza,
     obtenerPlazasConjunto,
     asignarParqueaderoApartamento,

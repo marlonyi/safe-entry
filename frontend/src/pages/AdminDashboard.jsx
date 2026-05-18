@@ -25,6 +25,20 @@ export default function AdminDashboard({ user }) {
   const [usuariosPageSize, setUsuariosPageSize] = useState(10);
   const [visitantesPage, setVisitantesPage] = useState(1);
   const [visitantesPageSize, setVisitantesPageSize] = useState(10);
+
+  // 🅿️ Inicialización de parqueaderos por conjunto
+  const [showInitModal, setShowInitModal] = useState(false);
+  const [initConjuntoTarget, setInitConjuntoTarget] = useState(null);
+  const [initConfig, setInitConfig] = useState({
+    torres: 'A,B',
+    pisos: 5,
+    apartamentosPorPiso: 2,
+    residenteMoto: 10,
+    visitanteCarro: 10,
+    visitanteMoto: 5
+  });
+  const [initLoading, setInitLoading] = useState(false);
+  const [initError, setInitError] = useState(null);
   const [parkData, setParkData] = useState(null);
   const [parkStats, setParkStats] = useState(null);
 
@@ -777,6 +791,13 @@ export default function AdminDashboard({ user }) {
                     purple: 'text-purple-600'
                   };
 
+                  // ¿El conjunto activo no tiene parqueaderos? Mostramos banner de inicialización
+                  const totalPlazasActive = (activeConjunto?.privadosCarro?.length || 0)
+                    + (activeConjunto?.privadosMoto?.length || 0)
+                    + (activeConjunto?.visitantesCarro?.length || 0)
+                    + (activeConjunto?.visitantesMoto?.length || 0);
+                  const conjuntoSinPlazas = activeConjunto && totalPlazasActive === 0;
+
                   return (
                     <>
                       {conjuntosList.length > 0 && (
@@ -800,7 +821,34 @@ export default function AdminDashboard({ user }) {
                         </div>
                       )}
 
-                      <div className="flex flex-wrap gap-2 mb-6 border-t border-slate-100 pt-5">
+                      {/* Banner: conjunto sin parqueaderos → ofrecer inicialización */}
+                      {conjuntoSinPlazas && (
+                        <div className="mb-5 p-5 rounded-2xl bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200">
+                          <div className="flex items-start gap-3">
+                            <div className="p-2 rounded-xl bg-amber-100 text-amber-700 shrink-0">
+                              <Car size={20} />
+                            </div>
+                            <div className="flex-1">
+                              <h3 className="font-bold text-amber-900">El conjunto "{activeConjunto.nombre}" aún no tiene parqueaderos</h3>
+                              <p className="text-sm text-amber-700 mt-1">
+                                Genera plazas automáticamente con la configuración que prefieras (torres × pisos × apartamentos + plazas para visitantes).
+                              </p>
+                              <button
+                                onClick={() => {
+                                  setInitConjuntoTarget(activeConjunto);
+                                  setInitConfig({ torres: 'A,B', pisos: 5, apartamentosPorPiso: 2, residenteMoto: 10, visitanteCarro: 10, visitanteMoto: 5 });
+                                  setShowInitModal(true);
+                                }}
+                                className="mt-3 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 text-white font-semibold text-sm hover:scale-105 transition-transform shadow-lg shadow-amber-500/30"
+                              >
+                                ⚙️ Configurar e inicializar parqueaderos
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-2 mb-6 border-t border-slate-100 pt-5">
                         <button
                           onClick={() => setTorreSeleccionada('privados')}
                           className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition-all duration-300 ${
@@ -1196,6 +1244,150 @@ export default function AdminDashboard({ user }) {
                   {editMode ? 'Actualizar Usuario' : 'Guardar Usuario'}
                 </button>
               </form>
+            </div>
+          </div>
+        )}
+
+        {/* 🅿️ Modal: Inicializar parqueaderos para un conjunto */}
+        {showInitModal && initConjuntoTarget && (
+          <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <div className="relative bg-white rounded-2xl p-8 w-full max-w-lg shadow-2xl">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-amber-500 via-orange-500 to-red-500 rounded-t-2xl" />
+              <button
+                onClick={() => { setShowInitModal(false); setInitError(null); }}
+                className="absolute top-4 right-4 w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-500 flex items-center justify-center"
+              >
+                <X size={18} />
+              </button>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="p-2 rounded-xl bg-amber-100">
+                  <Car className="text-amber-600" size={22} />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-800">Inicializar parqueaderos</h2>
+                  <p className="text-xs text-slate-500">{initConjuntoTarget.nombre}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Torres (separadas por coma)</label>
+                  <input
+                    type="text"
+                    value={initConfig.torres}
+                    onChange={e => setInitConfig({ ...initConfig, torres: e.target.value })}
+                    className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                    placeholder="A,B,C"
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Pisos por torre</label>
+                    <input
+                      type="number" min="1"
+                      value={initConfig.pisos}
+                      onChange={e => setInitConfig({ ...initConfig, pisos: Number(e.target.value) || 1 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Aptos por piso</label>
+                    <input
+                      type="number" min="1"
+                      value={initConfig.apartamentosPorPiso}
+                      onChange={e => setInitConfig({ ...initConfig, apartamentosPorPiso: Number(e.target.value) || 1 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="p-3 bg-purple-50 rounded-xl border border-purple-200">
+                  <label className="block text-xs font-bold text-purple-800 mb-1">🏍️ Plazas de MOTO para residentes</label>
+                  <input
+                    type="number" min="0"
+                    value={initConfig.residenteMoto}
+                    onChange={e => setInitConfig({ ...initConfig, residenteMoto: Number(e.target.value) || 0 })}
+                    className="w-full p-2 border border-purple-300 rounded-lg text-sm bg-white"
+                    placeholder="Ej: 10"
+                  />
+                  <p className="text-[10px] text-purple-600 mt-1">
+                    Los carros se crean automáticamente (1 por apartamento). Esta cantidad es <b>adicional</b> para motos.
+                  </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Plazas visitantes carro</label>
+                    <input
+                      type="number" min="0"
+                      value={initConfig.visitanteCarro}
+                      onChange={e => setInitConfig({ ...initConfig, visitanteCarro: Number(e.target.value) || 0 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">Plazas visitantes moto</label>
+                    <input
+                      type="number" min="0"
+                      value={initConfig.visitanteMoto}
+                      onChange={e => setInitConfig({ ...initConfig, visitanteMoto: Number(e.target.value) || 0 })}
+                      className="w-full p-2 border border-slate-300 rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-xl text-xs text-amber-800 border border-amber-200">
+                  <b>Resumen:</b>{' '}
+                  <b>{(initConfig.torres.split(',').filter(Boolean).length) * initConfig.pisos * initConfig.apartamentosPorPiso}</b> carros residentes
+                  + <b>{initConfig.residenteMoto}</b> motos residentes
+                  + <b>{initConfig.visitanteCarro}</b> visitantes carro
+                  + <b>{initConfig.visitanteMoto}</b> visitantes moto
+                  = <b>{(initConfig.torres.split(',').filter(Boolean).length) * initConfig.pisos * initConfig.apartamentosPorPiso + initConfig.residenteMoto + initConfig.visitanteCarro + initConfig.visitanteMoto}</b> plazas en total
+                </div>
+
+                {initError && (
+                  <div className="p-2 bg-rose-50 text-rose-700 text-sm rounded-lg">{initError}</div>
+                )}
+
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    onClick={() => { setShowInitModal(false); setInitError(null); }}
+                    className="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    disabled={initLoading}
+                    onClick={async () => {
+                      setInitLoading(true);
+                      setInitError(null);
+                      try {
+                        const body = {
+                          torres: initConfig.torres.split(',').map(t => t.trim()).filter(Boolean),
+                          pisos: Number(initConfig.pisos),
+                          apartamentosPorPiso: Number(initConfig.apartamentosPorPiso),
+                          residenteMoto: Number(initConfig.residenteMoto),
+                          visitanteCarro: Number(initConfig.visitanteCarro),
+                          visitanteMoto: Number(initConfig.visitanteMoto)
+                        };
+                        await api.post(`/parqueaderos/inicializar-conjunto/${initConjuntoTarget._id}`, body);
+                        setShowInitModal(false);
+                        // Recargar la data de parqueaderos
+                        const torreResp = await api.get('/parqueaderos/por-torre').catch(() => null);
+                        if (torreResp) setParkData(torreResp.data?.data || torreResp.data);
+                        const statsResp = await api.get('/parqueaderos/estadisticas').catch(() => null);
+                        if (statsResp) setParkStats(statsResp.data?.data || statsResp.data);
+                      } catch (e) {
+                        setInitError(e.response?.data?.error || e.response?.data?.message || e.message);
+                      } finally {
+                        setInitLoading(false);
+                      }
+                    }}
+                    className="px-5 py-2 text-sm font-bold text-white bg-gradient-to-r from-amber-500 to-orange-500 rounded-lg disabled:opacity-50"
+                  >
+                    {initLoading ? 'Creando...' : 'Crear parqueaderos'}
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         )}

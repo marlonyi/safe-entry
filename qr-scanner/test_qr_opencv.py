@@ -20,15 +20,37 @@ print("=" * 50)
 qr_detector = cv2.QRCodeDetector()
 print("[OK] QRCodeDetector creado")
 
-# Abrir camara
+# Abrir camara — probar varios backends hasta encontrar uno que funcione
 print("\nAbriendo camara...")
-cap = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+backends = [
+    ("MSMF",   cv2.CAP_MSMF),    # Media Foundation (Windows 10+)
+    ("DSHOW",  cv2.CAP_DSHOW),   # DirectShow (legacy Windows)
+    ("ANY",    cv2.CAP_ANY),     # Que OpenCV decida
+]
+cap = None
+for nombre, backend in backends:
+    print(f"  Probando backend {nombre}...")
+    cap_try = cv2.VideoCapture(0, backend)
+    if cap_try.isOpened():
+        # Verificar que la cámara realmente está produciendo frames válidos
+        ret, frame = cap_try.read()
+        if ret and frame is not None and frame.size > 0:
+            cap = cap_try
+            # Forzar resolución estándar para evitar errores de driver
+            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+            print(f"[OK] Camara abierta con backend {nombre}")
+            break
+        else:
+            cap_try.release()
+    else:
+        cap_try.release()
 
-if not cap.isOpened():
-    print("[ERROR] No se pudo abrir la camara")
+if cap is None or not cap.isOpened():
+    print("[ERROR] No se pudo abrir la camara con ningun backend")
+    print("        Verifica que ninguna otra aplicacion la este usando")
+    print("        (navegador, Teams, Zoom, etc.) y vuelve a intentar.")
     sys.exit(1)
-
-print("[OK] Camara abierta")
 print("\n[Presiona 'q' para salir]")
 print("[Muestra un QR frente a la camara]\n")
 
@@ -62,19 +84,25 @@ def extract_token(qr_data):
 
 
 def verify_token(tipo, token):
-    """Verificar token contra el API"""
+    """Verificar token contra el API y REGISTRAR el ingreso si es válido"""
     try:
         if tipo == "visitante" or tipo == "auto":
-            # Intentar como visitante primero
-            resp = requests.get(f"{API_BASE_URL}/api/visitantes/qr/verificar/{token}", timeout=5)
+            # Endpoint que verifica + registra el ingreso en una sola llamada
+            resp = requests.post(
+                f"{API_BASE_URL}/api/visitantes/qr/ingresar/{token}",
+                timeout=5
+            )
             if resp.status_code == 200:
                 data = resp.json()
                 if data.get("valid"):
                     v = data.get("visitante", {})
                     nombre = f"{v.get('nombre', '')} {v.get('apellido', '')}"
-                    print(f"  ✅ VISITANTE AUTORIZADO: {nombre}")
-                    print(f"     Cédula: {v.get('cedula', 'N/A')}")
+                    if data.get("yaIngreso"):
+                        print(f"  ℹ️  VISITANTE YA ESTABA DENTRO: {nombre}")
+                    else:
+                        print(f"  ✅ VISITANTE AUTORIZADO E INGRESADO: {nombre}")
                     print(f"     Placa: {v.get('placa', 'N/A')}")
+                    print(f"     Estado: {v.get('estado', 'N/A')}")
                     return True
 
         if tipo == "residente" or tipo == "auto":
