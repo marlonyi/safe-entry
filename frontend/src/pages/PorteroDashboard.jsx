@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, UserCheck, MonitorPlay, Camera, Car, AlertTriangle, ArrowRightCircle, Users, Clock, QrCode } from 'lucide-react';
+import { ShieldCheck, UserCheck, MonitorPlay, Car, AlertTriangle, ArrowRightCircle, Clock, QrCode } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
 
@@ -17,19 +17,17 @@ export default function PorteroDashboard({ user }) {
   const [historial, setHistorial] = useState([]);
   const [tipoTab, setTipoTab] = useState('residentes');
 
-  // Desempaqueta respuestas considerando que el interceptor de api.js
-  // ya convierte { success, data, message } en data directamente.
   const unwrap = (resp) => {
     const d = resp?.data;
     if (Array.isArray(d)) return d;
-    if (Array.isArray(d?.items)) return d.items;       // post-interceptor (paginado)
-    if (Array.isArray(d?.data)) return d.data;         // raro: doble wrap
+    if (Array.isArray(d?.items)) return d.items;
+    if (Array.isArray(d?.data)) return d.data;
     if (Array.isArray(d?.data?.items)) return d.data.items;
     return [];
   };
 
   const recargar = async () => {
-    setView(v => v); // forzar refetch
+    setView(v => v);
     const visResp = await api.get('/visitantes').catch(() => ({ data: { data: [] } }));
     setVisitantes(unwrap(visResp));
     const histResp = await api.get('/parqueaderos/historial?limit=20&page=1').catch(() => ({ data: { data: { items: [] } } }));
@@ -50,9 +48,7 @@ export default function PorteroDashboard({ user }) {
     try {
       await api.post(`/visitantes/${visitante._id || visitante.id}/registrar-ingreso`);
       await recargar();
-    } catch (e) {
-      alert('Error: ' + (e.response?.data?.error || e.message));
-    }
+    } catch (e) { alert('Error: ' + (e.response?.data?.error || e.message)); }
   };
 
   const handleRegistrarSalida = async (visitante) => {
@@ -60,56 +56,43 @@ export default function PorteroDashboard({ user }) {
     try {
       await api.post(`/visitantes/${visitante._id || visitante.id}/registrar-salida`);
       await recargar();
-    } catch (e) {
-      alert('Error: ' + (e.response?.data?.error || e.message));
-    }
+    } catch (e) { alert('Error: ' + (e.response?.data?.error || e.message)); }
   };
 
   useEffect(() => {
-    // `silent` evita el spinner cuando es un refresh automático
     const fetchData = async (silent = false) => {
       try {
         if (!silent) setLoading(true);
 
-        // Parqueaderos (siempre)
         const parkResp = await api.get('/parqueaderos').catch(() => ({ data: { data: [] } }));
         const parkArr = unwrap(parkResp);
         setParqueaderos(parkArr);
         const libres = parkArr.filter(p => p.estado === 'DISPONIBLE').length;
 
-        // Visitantes
         const visResp = await api.get('/visitantes').catch(() => ({ data: { data: [] } }));
         const visArr = unwrap(visResp);
         setVisitantes(visArr);
         const pendientes = visArr.filter(v => v.estado === 'pendiente').length;
         const dentro = visArr.filter(v => v.estado === 'ingresado').length;
 
-        // Historial reciente
         const histResp = await api.get('/parqueaderos/historial?limit=20&page=1').catch(() => ({ data: { data: { items: [] } } }));
         const histArr = unwrap(histResp);
         setHistorial(histArr);
 
-        // Stats de historial (usa endpoint nuevo). El interceptor ya desempaqueta a statsResp.data
         const statsResp = await api.get('/parqueaderos/historial/estadisticas').catch(() => ({ data: {} }));
         const statsHist = statsResp.data || {};
 
-        // Detectar alertas: visitantes con horaEntrada que exceden tiempoMaximoHoras
         const ahora = Date.now();
         const alertas = parkArr.filter(p =>
-          p.estado === 'OCUPADO' &&
-          p.categoria === 'VISITANTE' &&
-          p.horaEntrada &&
-          p.tiempoMaximoHoras &&
+          p.estado === 'OCUPADO' && p.categoria === 'VISITANTE' && p.horaEntrada && p.tiempoMaximoHoras &&
           (ahora - new Date(p.horaEntrada).getTime()) / 3600000 > p.tiempoMaximoHoras
         ).length;
 
         setStats({
-          plazasLibres: libres,
-          plazasTotal: parkArr.length,
+          plazasLibres: libres, plazasTotal: parkArr.length,
           entradasHoy: statsHist.entradasHoy || 0,
           salidasHoy: statsHist.salidasHoy || 0,
-          visitantesDentro: dentro,
-          visitantesPendientes: pendientes,
+          visitantesDentro: dentro, visitantesPendientes: pendientes,
           placasLeidas: histArr.filter(h => h.metodo === 'LPR_CAMERA').length || 0,
           alertas
         });
@@ -120,248 +103,260 @@ export default function PorteroDashboard({ user }) {
       }
     };
 
-    // Carga inicial con spinner
     fetchData();
-
-    // 🔄 Auto-refresh cada 3 segundos para reflejar entradas/salidas
-    // hechas desde el escáner Python o desde otra sesión de portero
     const intervalo = setInterval(() => {
-      // Solo refrescar si la pestaña está visible (ahorra batería y peticiones)
-      if (!document.hidden) {
-        fetchData(true);
-      }
+      if (!document.hidden) fetchData(true);
     }, 3000);
-
     return () => clearInterval(intervalo);
   }, [view]);
 
-  const cardClass = "bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition";
+  /* ── NAV ── */
+  const navItems = [
+    { id: 'dashboard',   label: 'Panel Principal', icon: MonitorPlay },
+    { id: 'visitantes',  label: 'Visitantes',      icon: UserCheck   },
+    { id: 'parqueaderos',label: 'Parqueaderos',     icon: Car         },
+  ];
 
+  /* ── DASHBOARD ── */
   const renderDashboard = () => {
-    const cards = [
-      { title: 'Entradas Hoy', value: stats.entradasHoy, icon: ArrowRightCircle, color: 'text-emerald-600', bg: 'bg-emerald-100' },
-      { title: 'Salidas Hoy', value: stats.salidasHoy, icon: ArrowRightCircle, color: 'text-rose-600', bg: 'bg-rose-100', rotate: true },
-      { title: 'Visitantes Dentro', value: stats.visitantesDentro, icon: UserCheck, color: 'text-blue-600', bg: 'bg-blue-100' },
-      { title: 'Pendientes', value: stats.visitantesPendientes, icon: Clock, color: 'text-amber-600', bg: 'bg-amber-100' },
-      { title: 'Plazas Libres', value: loading ? '...' : `${stats.plazasLibres}/${stats.plazasTotal}`, icon: Car, color: 'text-teal-600', bg: 'bg-teal-100' },
-      { title: 'Alertas', value: stats.alertas, icon: AlertTriangle, color: stats.alertas > 0 ? 'text-red-600' : 'text-orange-600', bg: stats.alertas > 0 ? 'bg-red-100' : 'bg-orange-100' }
+    const statCards = [
+      { title: 'Entradas Hoy',    value: stats.entradasHoy,        accentColor: '#10B981', icon: ArrowRightCircle, rotate: false },
+      { title: 'Salidas Hoy',     value: stats.salidasHoy,         accentColor: '#EF4444', icon: ArrowRightCircle, rotate: true  },
+      { title: 'Visit. Dentro',   value: stats.visitantesDentro,   accentColor: '#0EA5E9', icon: UserCheck,        rotate: false },
+      { title: 'Pendientes',      value: stats.visitantesPendientes,accentColor: '#F59E0B', icon: Clock,           rotate: false },
+      { title: 'Plazas Libres',   value: loading ? '…' : `${stats.plazasLibres}/${stats.plazasTotal}`, accentColor: '#6366F1', icon: Car, rotate: false },
+      { title: 'Alertas',         value: stats.alertas,            accentColor: stats.alertas > 0 ? '#EF4444' : '#94A3B8', icon: AlertTriangle, rotate: false },
     ];
 
-    const visitantesPend = visitantes.filter(v => v.estado === 'pendiente').slice(0, 5);
+    const visitantesPend  = visitantes.filter(v => v.estado === 'pendiente').slice(0, 5);
     const visitantesDentro = visitantes.filter(v => v.estado === 'ingresado').slice(0, 5);
 
     return (
-      <>
-        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3 mb-6">
-          {cards.map((stat, i) => (
-            <div key={i} className={cardClass}>
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${stat.bg} ${stat.color}`}>
-                  <stat.icon size={20} className={stat.rotate ? 'rotate-180' : ''} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate">{stat.title}</p>
-                  <p className="text-xl font-bold text-slate-900">{stat.value}</p>
-                </div>
+      <div className="se-fade-in space-y-6">
+        {/* Stats */}
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-4">
+          {statCards.map((s, i) => (
+            <div key={i} className="se-card se-slide-up" style={{ borderRadius: 14, padding: '1.125rem', animationDelay: `${i * 0.06}s` }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, marginBottom: 10,
+                background: `${s.accentColor}1a`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <s.icon size={18} style={{ color: s.accentColor, transform: s.rotate ? 'rotate(180deg)' : 'none' }} />
               </div>
+              <p className="se-heading" style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--se-text-primary)', lineHeight: 1 }}>
+                {s.value}
+              </p>
+              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginTop: 4 }}>
+                {s.title}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Columna izquierda: Pendientes + Dentro (apilados) */}
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
 
-            {/* Visitantes pendientes para validar */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Clock size={20} className="text-amber-600" />
-                  Visitantes pendientes de ingreso
-                </h2>
-                <span className="text-xs text-slate-500">{stats.visitantesPendientes} en total</span>
+          {/* Pendientes + Dentro */}
+          <div className="lg:col-span-2 space-y-5">
+
+            {/* Pendientes */}
+            <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
+              <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--se-amber-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <Clock size={17} style={{ color: 'var(--se-amber)' }} />
+                  </div>
+                  <h2 className="se-heading" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                    Pendientes de ingreso
+                  </h2>
+                </div>
+                <span className="se-badge se-badge-amber">{stats.visitantesPendientes} en total</span>
               </div>
-              {visitantesPend.length === 0 ? (
-                <div className="h-32 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
-                  <UserCheck size={28} className="text-slate-300 mb-1" />
-                  <p className="text-slate-400 text-sm font-medium">No hay visitantes pendientes</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {visitantesPend.map((v, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-amber-50 border border-amber-100 hover:bg-amber-100 transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-amber-200 text-amber-700 flex items-center justify-center font-bold shrink-0">
-                          {(v.nombre || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 truncate">{v.nombre} {v.apellido}</p>
-                          <p className="text-xs text-slate-500">
-                            Apto {v.apartamentoDestino || '-'} {v.torreDestino ? `· Torre ${v.torreDestino}` : ''}
-                            {v.motivoVisita ? ` · ${v.motivoVisita}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200">{v.placaVehiculo || 'sin placa'}</span>
-                        <button
-                          onClick={() => handleRegistrarIngreso(v)}
-                          className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition"
-                          title="Registrar entrada"
-                        >
-                          <ArrowRightCircle size={14} /> Entrar
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ padding: '1rem' }}>
+                {visitantesPend.length === 0 ? (
+                  <EmptyState icon={UserCheck} text="No hay visitantes pendientes" />
+                ) : (
+                  <div className="space-y-2">
+                    {visitantesPend.map((v, i) => (
+                      <VisitanteRow
+                        key={i} v={v}
+                        accentColor="var(--se-amber)" accentBg="var(--se-amber-dim)"
+                        action={<button onClick={() => handleRegistrarIngreso(v)} style={actionBtnStyle('#10B981')}>
+                          <ArrowRightCircle size={13} /> Entrar
+                        </button>}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* Visitantes dentro (para registrar salida) */}
-            <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-              <div className="flex items-center justify-between mb-4">
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <UserCheck size={20} className="text-blue-600" />
-                  Visitantes dentro
-                </h2>
-                <span className="text-xs text-slate-500">{stats.visitantesDentro} en total</span>
+            {/* Dentro */}
+            <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
+              <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 34, height: 34, borderRadius: 10, background: 'var(--se-accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <UserCheck size={17} style={{ color: 'var(--se-accent)' }} />
+                  </div>
+                  <h2 className="se-heading" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                    Visitantes dentro
+                  </h2>
+                </div>
+                <span className="se-badge se-badge-accent">{stats.visitantesDentro} activos</span>
               </div>
-              {visitantesDentro.length === 0 ? (
-                <div className="h-32 bg-slate-50 rounded-2xl flex flex-col items-center justify-center border-2 border-dashed border-slate-200">
-                  <UserCheck size={28} className="text-slate-300 mb-1" />
-                  <p className="text-slate-400 text-sm font-medium">No hay visitantes dentro</p>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {visitantesDentro.map((v, i) => (
-                    <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-blue-50 border border-blue-100 hover:bg-blue-100 transition">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-10 h-10 rounded-full bg-blue-200 text-blue-700 flex items-center justify-center font-bold shrink-0">
-                          {(v.nombre || '?').charAt(0).toUpperCase()}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 truncate">{v.nombre} {v.apellido}</p>
-                          <p className="text-xs text-slate-500">
-                            Apto {v.apartamentoDestino || '-'} {v.torreDestino ? `· Torre ${v.torreDestino}` : ''}
-                          </p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <span className="font-mono text-xs bg-white px-2 py-1 rounded border border-slate-200">{v.placaVehiculo || 'sin placa'}</span>
-                        <button
-                          onClick={() => handleRegistrarSalida(v)}
-                          className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1 shadow-sm transition"
-                          title="Registrar salida"
-                        >
-                          <ArrowRightCircle size={14} className="rotate-180" /> Salir
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <div style={{ padding: '1rem' }}>
+                {visitantesDentro.length === 0 ? (
+                  <EmptyState icon={UserCheck} text="No hay visitantes dentro" />
+                ) : (
+                  <div className="space-y-2">
+                    {visitantesDentro.map((v, i) => (
+                      <VisitanteRow
+                        key={i} v={v}
+                        accentColor="var(--se-accent)" accentBg="var(--se-accent-dim)"
+                        action={<button onClick={() => handleRegistrarSalida(v)} style={actionBtnStyle('#EF4444')}>
+                          <ArrowRightCircle size={13} style={{ transform: 'rotate(180deg)' }} /> Salir
+                        </button>}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
-
           </div>
 
-          {/* Columna derecha: Últimos accesos */}
-          <div className="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-            <h2 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <ArrowRightCircle size={20} className="text-blue-600" />
-              Últimos accesos
-            </h2>
-            <div className="space-y-3 max-h-[600px] overflow-y-auto pr-1">
+          {/* Últimos accesos */}
+          <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
+            <div className="se-section-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <ArrowRightCircle size={17} style={{ color: '#6366F1' }} />
+              </div>
+              <h2 className="se-heading" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                Últimos accesos
+              </h2>
+            </div>
+            <div className="se-scroll" style={{ padding: '1rem', maxHeight: 540, overflowY: 'auto' }}>
               {historial.length === 0 ? (
-                <p className="text-sm text-slate-500 text-center py-4">No hay registros</p>
+                <p style={{ textAlign: 'center', padding: '2rem 0', fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>Sin registros</p>
               ) : historial.slice(0, 8).map((item, i) => (
-                <div key={i} className="flex gap-3 items-start">
-                  <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 ${item.tipoAcceso === 'entrada' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                    <ArrowRightCircle size={16} className={item.tipoAcceso === 'salida' ? 'rotate-180' : ''} />
+                <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: item.tipoAcceso === 'entrada' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)',
+                    color: item.tipoAcceso === 'entrada' ? '#10B981' : '#EF4444',
+                  }}>
+                    <ArrowRightCircle size={14} style={item.tipoAcceso === 'salida' ? { transform: 'rotate(180deg)' } : {}} />
                   </div>
-                  <div className="bg-slate-50 p-2.5 rounded-xl w-full border border-slate-100 min-w-0">
-                    <div className="flex justify-between items-start gap-2">
-                      <p className="text-sm font-bold text-slate-800 capitalize truncate">{item.tipoAcceso} · {item.tipoUsuario}</p>
-                      <span className="text-[10px] text-slate-500 font-mono shrink-0">{new Date(item.fechaHora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}</span>
+                  <div style={{
+                    flex: 1, minWidth: 0,
+                    background: 'var(--se-bg)',
+                    border: '1px solid var(--se-border)',
+                    borderRadius: 10, padding: '0.5rem 0.75rem',
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: 4 }}>
+                      <p style={{ fontSize: '0.775rem', fontWeight: 700, color: 'var(--se-text-primary)', textTransform: 'capitalize' }}>
+                        {item.tipoAcceso} · {item.tipoUsuario}
+                      </p>
+                      <span style={{ fontSize: '0.65rem', color: 'var(--se-text-muted)', fontFamily: 'monospace', flexShrink: 0 }}>
+                        {new Date(item.fechaHora).toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
                     </div>
-                    <p className="text-xs text-slate-700 truncate">{item.nombreUsuario || '-'}</p>
-                    <p className="text-xs text-slate-500 font-mono mt-0.5">{item.placa || '-'} {item.plaza ? `· ${item.plaza}` : ''}</p>
+                    <p style={{ fontSize: '0.72rem', color: 'var(--se-text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {item.nombreUsuario || '—'}
+                    </p>
+                    <p style={{ fontSize: '0.68rem', color: 'var(--se-text-muted)', fontFamily: 'monospace', marginTop: 2 }}>
+                      {item.placa || '—'} {item.plaza ? `· ${item.plaza}` : ''}
+                    </p>
                   </div>
                 </div>
               ))}
             </div>
           </div>
         </div>
-      </>
+      </div>
     );
   };
 
+  /* ── VISITANTES ── */
   const renderVisitantes = () => {
-    const badge = (estado) => ({
-      pendiente: 'bg-amber-100 text-amber-700',
-      ingresado: 'bg-emerald-100 text-emerald-700',
-      salido: 'bg-slate-200 text-slate-600'
-    })[estado] || 'bg-slate-100 text-slate-600';
+    const estadoBadge = (estado) => {
+      const map = {
+        pendiente: { bg: 'var(--se-amber-dim)',   color: '#B45309' },
+        ingresado: { bg: 'rgba(16,185,129,0.10)', color: '#065F46' },
+        salido:    { bg: '#F1F5F9',               color: 'var(--se-text-secondary)' },
+      };
+      return map[estado] || { bg: '#F1F5F9', color: 'var(--se-text-secondary)' };
+    };
 
     return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <UserCheck size={24} className="text-blue-600" /> Listado de Visitantes
-          </h2>
-          <span className="text-sm text-slate-500">{visitantes.length} registrados</span>
+      <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ height: 3, background: 'linear-gradient(90deg, #F59E0B, #0EA5E9)' }} />
+        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h2 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+              Listado de Visitantes
+            </h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', marginTop: 2 }}>
+              {visitantes.length} registrados
+            </p>
+          </div>
+          <span className="se-badge se-badge-accent">
+            <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--se-accent)', display: 'inline-block' }} />
+            Actualización automática
+          </span>
         </div>
-        <div className="overflow-x-auto rounded-xl">
-          <table className="w-full text-left">
+        <div style={{ overflowX: 'auto' }}>
+          <table className="w-full se-table">
             <thead>
-              <tr className="bg-slate-50 text-slate-600 text-sm">
-                <th className="p-3 font-semibold">Nombre</th>
-                <th className="p-3 font-semibold">Cédula</th>
-                <th className="p-3 font-semibold">Placa</th>
-                <th className="p-3 font-semibold">Destino</th>
-                <th className="p-3 font-semibold">Estado</th>
-                <th className="p-3 font-semibold">Acción</th>
+              <tr>
+                <th style={{ textAlign: 'left' }}>Nombre</th>
+                <th style={{ textAlign: 'left' }}>Cédula</th>
+                <th style={{ textAlign: 'left' }}>Placa</th>
+                <th style={{ textAlign: 'left' }}>Destino</th>
+                <th style={{ textAlign: 'left' }}>Estado</th>
+                <th style={{ textAlign: 'left' }}>Acción</th>
               </tr>
             </thead>
             <tbody>
               {visitantes.length === 0 ? (
-                <tr><td colSpan="6" className="text-center p-8 text-slate-500">No hay visitantes</td></tr>
-              ) : visitantes.map((v, i) => (
-                <tr key={v._id || i} className="border-b border-slate-100 hover:bg-blue-50/50 transition">
-                  <td className="p-3 font-medium text-slate-800">{v.nombre} {v.apellido}</td>
-                  <td className="p-3 text-slate-600">{v.cedula}</td>
-                  <td className="p-3 font-mono text-slate-700 bg-slate-50 rounded px-2">{v.placaVehiculo || 'N/A'}</td>
-                  <td className="p-3 text-slate-600 text-sm">
-                    {v.torreDestino ? `T${v.torreDestino} ` : ''}{v.apartamentoDestino ? `· Apto ${v.apartamentoDestino}` : '-'}
-                  </td>
-                  <td className="p-3">
-                    <span className={`px-2.5 py-1 rounded-full text-xs font-semibold ${badge(v.estado)}`}>
-                      {v.estado || 'desconocido'}
-                    </span>
-                  </td>
-                  <td className="p-3">
-                    {v.estado === 'pendiente' && (
-                      <button
-                        onClick={() => handleRegistrarIngreso(v)}
-                        className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
-                      >
-                        <ArrowRightCircle size={14} /> Entrar
-                      </button>
-                    )}
-                    {v.estado === 'ingresado' && (
-                      <button
-                        onClick={() => handleRegistrarSalida(v)}
-                        className="bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg flex items-center gap-1"
-                      >
-                        <ArrowRightCircle size={14} className="rotate-180" /> Salir
-                      </button>
-                    )}
-                    {v.estado === 'salido' && (
-                      <span className="text-xs text-slate-400 italic">Visita finalizada</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>No hay visitantes</td></tr>
+              ) : visitantes.map((v, i) => {
+                const badge = estadoBadge(v.estado);
+                return (
+                  <tr key={v._id || i}>
+                    <td style={{ fontWeight: 600, color: 'var(--se-text-primary)' }}>{v.nombre} {v.apellido}</td>
+                    <td style={{ color: 'var(--se-text-secondary)' }}>{v.cedula}</td>
+                    <td>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, color: 'var(--se-text-primary)', background: 'var(--se-bg)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--se-border)' }}>
+                        {v.placaVehiculo || 'N/A'}
+                      </span>
+                    </td>
+                    <td style={{ color: 'var(--se-text-muted)', fontSize: '0.8rem' }}>
+                      {v.torreDestino ? `T${v.torreDestino} ` : ''}{v.apartamentoDestino ? `· Apto ${v.apartamentoDestino}` : '—'}
+                    </td>
+                    <td>
+                      <span className="se-badge" style={{ background: badge.bg, color: badge.color }}>
+                        {v.estado || 'desconocido'}
+                      </span>
+                    </td>
+                    <td>
+                      {v.estado === 'pendiente' && (
+                        <button onClick={() => handleRegistrarIngreso(v)} style={actionBtnStyle('#10B981')}>
+                          <ArrowRightCircle size={13} /> Entrar
+                        </button>
+                      )}
+                      {v.estado === 'ingresado' && (
+                        <button onClick={() => handleRegistrarSalida(v)} style={actionBtnStyle('#EF4444')}>
+                          <ArrowRightCircle size={13} style={{ transform: 'rotate(180deg)' }} /> Salir
+                        </button>
+                      )}
+                      {v.estado === 'salido' && (
+                        <span style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', fontStyle: 'italic' }}>Finalizada</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -369,131 +364,280 @@ export default function PorteroDashboard({ user }) {
     );
   };
 
+  /* ── PARQUEADEROS ── */
   const renderParqueaderos = () => {
     const filtrados = parqueaderos.filter(p => tipoTab === 'residentes' ? p.categoria === 'PRIVADO' : p.categoria === 'VISITANTE');
     const carros = filtrados.filter(p => p.tipoVehiculo === 'CARRO');
-    const motos = filtrados.filter(p => p.tipoVehiculo === 'MOTO');
+    const motos  = filtrados.filter(p => p.tipoVehiculo === 'MOTO');
 
-    const renderGrid = (lista, color) => {
-      if (lista.length === 0) return <p className="text-sm text-slate-400 italic">Sin parqueaderos</p>;
+    const colorMap = {
+      blue:   { border: '#93C5FD', bg: '#EFF6FF', text: '#1D4ED8', textOcc: '#EF4444' },
+      purple: { border: '#C4B5FD', bg: '#F5F3FF', text: '#7C3AED', textOcc: '#EF4444' },
+      emerald:{ border: '#6EE7B7', bg: '#ECFDF5', text: '#065F46', textOcc: '#EF4444' },
+      amber:  { border: '#FCD34D', bg: '#FFFBEB', text: '#92400E', textOcc: '#EF4444' },
+    };
+
+    const renderGrid = (lista, colorKey) => {
+      const c = colorMap[colorKey] || colorMap.blue;
+      if (lista.length === 0) return <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)', fontStyle: 'italic' }}>Sin parqueaderos</p>;
       return (
         <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-          {lista.sort((a, b) => (a.numero || '').localeCompare(b.numero || '')).map((p, i) => (
-            <div key={i} className={`p-3 rounded-xl border-2 text-center transition hover:scale-105 ${
-              p.estado === 'DISPONIBLE'
-                ? `border-${color}-300 bg-gradient-to-br from-${color}-50 to-${color}-100`
-                : 'border-red-300 bg-gradient-to-br from-red-50 to-rose-50'
-            }`}>
-              <p className="font-bold text-sm text-slate-800">{p.numero}</p>
-              <p className={`text-xs font-medium ${p.estado === 'DISPONIBLE' ? `text-${color}-700` : 'text-red-600'}`}>
-                {p.estado === 'DISPONIBLE' ? 'Libre' : 'Ocupado'}
-              </p>
-              {p.placaVehiculo && p.estado === 'OCUPADO' && (
-                <p className="text-[10px] mt-1 font-mono bg-white/70 rounded px-1 truncate">{p.placaVehiculo}</p>
-              )}
-            </div>
-          ))}
+          {lista.sort((a, b) => (a.numero || '').localeCompare(b.numero || '')).map((p, i) => {
+            const disponible = p.estado === 'DISPONIBLE';
+            return (
+              <div key={i} style={{
+                borderRadius: 12, padding: '0.625rem',
+                textAlign: 'center',
+                border: `2px solid ${disponible ? c.border : '#FCA5A5'}`,
+                background: disponible ? c.bg : '#FFF1F2',
+                transition: 'transform 0.15s',
+                cursor: 'default',
+              }}
+                onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.04)'}
+                onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+              >
+                <p style={{ fontSize: '0.8rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>{p.numero}</p>
+                <p style={{ fontSize: '0.65rem', fontWeight: 700, color: disponible ? c.text : c.textOcc, marginTop: 2 }}>
+                  {disponible ? 'Libre' : 'Ocupado'}
+                </p>
+                {p.placaVehiculo && !disponible && (
+                  <p style={{ fontSize: '0.58rem', fontFamily: 'monospace', color: 'var(--se-text-muted)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {p.placaVehiculo}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       );
     };
 
     return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
-            <Car size={24} className="text-emerald-600" /> Estado de Parqueaderos
-          </h2>
-          <span className="text-sm text-slate-500">{parqueaderos.filter(p => p.estado === 'DISPONIBLE').length}/{parqueaderos.length} libres</span>
-        </div>
-
-        <div className="flex gap-2 mb-6">
-          <button
-            onClick={() => setTipoTab('residentes')}
-            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition ${
-              tipoTab === 'residentes'
-                ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 scale-105'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >Residentes</button>
-          <button
-            onClick={() => setTipoTab('visitantes')}
-            className={`px-5 py-2.5 rounded-xl font-semibold text-sm transition ${
-              tipoTab === 'visitantes'
-                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/30 scale-105'
-                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-            }`}
-          >Visitantes</button>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h3 className="font-semibold text-slate-600 mb-3 flex items-center gap-2">
-              <Car size={18} /> Carros <span className="text-xs text-slate-400 font-normal">({carros.length})</span>
-            </h3>
-            {renderGrid(carros, tipoTab === 'residentes' ? 'blue' : 'emerald')}
+      <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden' }}>
+        <div style={{ height: 3, background: 'linear-gradient(90deg, #6366F1, #0EA5E9)' }} />
+        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 36, height: 36, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <Car size={18} style={{ color: '#6366F1' }} />
+            </div>
+            <h2 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+              Estado de Parqueaderos
+            </h2>
           </div>
-          <div>
-            <h3 className="font-semibold text-slate-600 mb-3 flex items-center gap-2">
-              <Car size={18} /> Motos <span className="text-xs text-slate-400 font-normal">({motos.length})</span>
-            </h3>
-            {renderGrid(motos, tipoTab === 'residentes' ? 'purple' : 'orange')}
+          <span className="se-badge se-badge-accent">
+            {parqueaderos.filter(p => p.estado === 'DISPONIBLE').length}/{parqueaderos.length} libres
+          </span>
+        </div>
+
+        <div style={{ padding: '1rem 1.25rem 1.5rem' }}>
+          {/* Tabs */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: '1.5rem' }}>
+            {[
+              { id: 'residentes', label: 'Residentes', color: '#0EA5E9' },
+              { id: 'visitantes', label: 'Visitantes',  color: '#F59E0B' },
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTipoTab(t.id)}
+                style={{
+                  padding: '0.5rem 1.25rem', borderRadius: 10,
+                  fontSize: '0.82rem', fontWeight: 700,
+                  cursor: 'pointer', transition: 'all 0.15s',
+                  ...(tipoTab === t.id
+                    ? { background: `${t.color}18`, color: t.color, border: `1px solid ${t.color}40`, boxShadow: `0 2px 8px ${t.color}20` }
+                    : { background: 'var(--se-bg)', color: 'var(--se-text-secondary)', border: '1px solid var(--se-border)' })
+                }}
+              >
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)', marginBottom: 10 }}>
+                Carros <span style={{ fontWeight: 400, color: 'var(--se-text-muted)' }}>({carros.length})</span>
+              </p>
+              {renderGrid(carros, tipoTab === 'residentes' ? 'blue' : 'emerald')}
+            </div>
+            <div>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)', marginBottom: 10 }}>
+                Motos <span style={{ fontWeight: 400, color: 'var(--se-text-muted)' }}>({motos.length})</span>
+              </p>
+              {renderGrid(motos, tipoTab === 'residentes' ? 'purple' : 'amber')}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
+  /* ── MAIN LAYOUT ── */
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex w-full">
-      <aside className="w-20 lg:w-64 bg-[#0F172A] flex-col fixed h-full z-10 shadow-2xl transition-all overflow-hidden hidden md:flex">
-        <div className="p-6 border-b border-white/10">
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--se-bg)' }}>
+
+      {/* Sidebar */}
+      <aside className="hidden md:flex flex-col" style={{
+        width: 250, flexShrink: 0,
+        position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
+        background: 'var(--se-panel-bg)',
+        borderRight: '1px solid var(--se-panel-border)',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.03,
+          backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Logo */}
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative' }}>
           <Logo theme="dark" subtitle="Portería · Control de Acceso" />
         </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-2">
-          <button onClick={() => setView('dashboard')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'dashboard' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-            <MonitorPlay size={22} /><span className="hidden lg:block">Panel Principal</span>
-          </button>
-          <button onClick={() => setView('visitantes')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'visitantes' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-            <UserCheck size={22} /><span className="hidden lg:block">Visitantes</span>
-          </button>
-          <button onClick={() => setView('parqueaderos')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'parqueaderos' ? 'bg-blue-500/10 text-blue-400 border border-blue-500/20' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}>
-            <Car size={22} /><span className="hidden lg:block">Parqueaderos</span>
-          </button>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '1rem 0.75rem', position: 'relative' }}>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className={`se-nav-item ${view === item.id ? 'active' : ''}`}
+              style={{ marginBottom: 4, position: 'relative' }}
+            >
+              {view === item.id && (
+                <div style={{ position: 'absolute', left: 0, width: 3, height: 24, background: 'var(--se-accent)', borderRadius: '0 4px 4px 0' }} />
+              )}
+              <item.icon size={19} className="se-nav-icon" />
+              <span>{item.label}</span>
+            </button>
+          ))}
         </nav>
 
-        {/* Perfil del usuario al fondo del sidebar */}
-        <div className="p-4 border-t border-white/10">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-white/5 border border-white/10">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg shadow-lg shrink-0">
+        {/* Auto-refresh indicator */}
+        <div style={{ padding: '0.625rem 1rem', borderTop: '1px solid var(--se-panel-border)', borderBottom: '1px solid var(--se-panel-border)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.5rem 0.75rem', borderRadius: 8, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)' }}>
+            <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />
+            <span style={{ fontSize: '0.7rem', color: '#10B981', fontWeight: 600 }}>Actualización cada 3s</span>
+          </div>
+        </div>
+
+        {/* User card */}
+        <div style={{ padding: '1rem', position: 'relative' }}>
+          <div className="se-user-card">
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              background: 'linear-gradient(135deg, #0EA5E9, #6366F1)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1rem', fontWeight: 800, color: '#fff',
+              boxShadow: '0 2px 8px rgba(14,165,233,0.3)',
+            }}>
               {user?.nombre?.charAt(0) || 'P'}
             </div>
-            <div className="flex-1 min-w-0 hidden lg:block">
-              <p className="text-sm font-semibold text-white truncate">{user?.nombre || 'Portero'}</p>
-              <p className="text-xs text-slate-400 capitalize">{user?.rol || 'porteria'}</p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: '0.825rem', fontWeight: 700, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.nombre || 'Portero'}
+              </p>
+              <p style={{ fontSize: '0.7rem', color: '#64748B', textTransform: 'capitalize' }}>
+                {user?.rol || 'porteria'}
+              </p>
             </div>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-20 lg:ml-64 p-4 lg:p-8">
-        <header className="flex justify-between items-center mb-8 bg-white p-4 rounded-2xl shadow-sm border border-slate-100">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Bienvenido, {user?.nombre || "Portero"}!</h1>
-            <p className="text-sm text-slate-500 font-medium">Turno Actual • SafeEntry System</p>
-          </div>
-          <div className="flex gap-4">
-            <div className="bg-emerald-50 text-emerald-700 px-4 py-2 rounded-xl flex items-center gap-2 border border-emerald-100 shadow-sm">
-              <ShieldCheck size={18} />
-              <span className="font-bold text-sm">Sistema Activo</span>
+      {/* Main content */}
+      <main style={{ flex: 1, marginLeft: 250, padding: '2rem', minWidth: 0 }}>
+
+        {/* Header */}
+        <header className="se-card" style={{ borderRadius: 14, overflow: 'hidden', marginBottom: '2rem' }}>
+          <div style={{ height: 3, background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', padding: '1rem 1.25rem' }}>
+            <div>
+              <h1 className="se-heading" style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+                Bienvenido, {user?.nombre || 'Portero'}
+              </h1>
+              <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)' }}>
+                Turno Actual · SafeEntry System
+              </p>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="se-badge" style={{ background: 'rgba(16,185,129,0.10)', color: '#065F46', border: '1px solid rgba(16,185,129,0.2)' }}>
+                <ShieldCheck size={13} /> Sistema Activo
+              </span>
+              <span className="se-badge se-badge-accent">
+                <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--se-accent)', display: 'inline-block' }} />
+                En turno
+              </span>
             </div>
           </div>
         </header>
 
-        {view === 'dashboard' && renderDashboard()}
-        {view === 'visitantes' && renderVisitantes()}
+        {view === 'dashboard'    && renderDashboard()}
+        {view === 'visitantes'   && renderVisitantes()}
         {view === 'parqueaderos' && renderParqueaderos()}
       </main>
     </div>
   );
 }
+
+/* ── Helpers ── */
+
+function VisitanteRow({ v, accentColor, accentBg, action }) {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      padding: '0.625rem 0.875rem', borderRadius: 10,
+      background: accentBg,
+      border: `1px solid ${accentColor}30`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+        <div style={{
+          width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
+          background: `${accentColor}30`,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          fontSize: '0.875rem', fontWeight: 800, color: accentColor,
+        }}>
+          {(v.nombre || '?').charAt(0).toUpperCase()}
+        </div>
+        <div style={{ minWidth: 0 }}>
+          <p style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--se-text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {v.nombre} {v.apellido}
+          </p>
+          <p style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)' }}>
+            Apto {v.apartamentoDestino || '—'}{v.torreDestino ? ` · Torre ${v.torreDestino}` : ''}
+            {v.motivoVisita ? ` · ${v.motivoVisita}` : ''}
+          </p>
+        </div>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+        <span style={{ fontFamily: 'monospace', fontSize: '0.72rem', fontWeight: 700, color: 'var(--se-text-primary)', background: '#fff', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--se-border)' }}>
+          {v.placaVehiculo || 'sin placa'}
+        </span>
+        {action}
+      </div>
+    </div>
+  );
+}
+
+function EmptyState({ icon: Icon, text }) {
+  return (
+    <div style={{
+      borderRadius: 12, padding: '2rem 1rem',
+      textAlign: 'center',
+      border: '2px dashed var(--se-border)',
+      background: 'var(--se-bg)',
+    }}>
+      <Icon size={28} style={{ color: 'var(--se-border)', margin: '0 auto 8px' }} />
+      <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>{text}</p>
+    </div>
+  );
+}
+
+const actionBtnStyle = (color) => ({
+  display: 'inline-flex', alignItems: 'center', gap: 5,
+  padding: '0.375rem 0.75rem', borderRadius: 8,
+  fontSize: '0.75rem', fontWeight: 700,
+  background: `${color}18`, color,
+  border: `1px solid ${color}35`,
+  cursor: 'pointer', transition: 'all 0.15s',
+});

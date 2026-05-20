@@ -22,23 +22,13 @@ export default function ResidenteDashboard({ user }) {
     return [];
   };
 
-  // Form states
-  const [nuevoVisitante, setNuevoVisitante] = useState({
-    nombre: '',
-    apellido: '',
-    cedula: '',
-    placaVehiculo: ''
-  });
-
-  // Vehicle states
+  const [nuevoVisitante, setNuevoVisitante] = useState({ nombre: '', apellido: '', cedula: '', placaVehiculo: '' });
   const [placaVehiculo, setPlacaVehiculo] = useState(user?.placa || '');
   const [placa2Vehiculo, setPlaca2Vehiculo] = useState('');
   const [tieneVehiculo, setTieneVehiculo] = useState(!!user?.placa);
   const [vehiculoLoading, setVehiculoLoading] = useState(false);
   const [vehiculoSuccess, setVehiculoSuccess] = useState('');
   const [vehiculoError, setVehiculoError] = useState('');
-
-  // Código Modal states
   const [showCodigoModal, setShowCodigoModal] = useState(false);
   const [selectedVisitante, setSelectedVisitante] = useState(null);
   const [loadingCodigo, setLoadingCodigo] = useState(false);
@@ -58,16 +48,11 @@ export default function ResidenteDashboard({ user }) {
 
   const fetchHomeData = async () => {
     try {
-      // 1. Cargar perfil completo (trae placa, parqueaderoAsignado, etc.)
       const perfilResp = await api.get(`/usuarios/perfil/${user.id}`).catch(() => ({ data: null }));
       const perfilData = perfilResp.data || null;
       setPerfil(perfilData);
-
-      // 2. Cargar visitantes
       const visResp = await api.get(`/visitantes/misVisitantes/${user.id}`).catch(() => ({ data: [] }));
       setVisitantes(unwrap(visResp));
-
-      // 3. Cargar accesos del residente filtrando por su placa (usa perfil completo)
       const placa = perfilData?.placaVehiculo || user?.placa;
       if (placa) {
         const accResp = await api.get(`/parqueaderos/historial?placa=${placa}&limit=10`).catch(() => ({ data: { items: [] } }));
@@ -75,11 +60,9 @@ export default function ResidenteDashboard({ user }) {
       } else {
         setMisAccesos([]);
       }
-
-      // 4. Info del parqueadero asignado (si tiene)
       const parqAsignadoId = perfilData?.parqueaderoAsignado;
       if (parqAsignadoId) {
-        const parqResp = await api.get(`/parqueaderos`).catch(() => ({ data: [] }));
+        const parqResp = await api.get('/parqueaderos').catch(() => ({ data: [] }));
         const todos = unwrap(parqResp);
         const idStr = typeof parqAsignadoId === 'object' ? parqAsignadoId._id : parqAsignadoId;
         const mio = todos.find(p => (p._id || p.id) === idStr);
@@ -96,7 +79,6 @@ export default function ResidenteDashboard({ user }) {
     if (view === 'home') fetchHomeData();
     if (view === 'visitantes') fetchVisitantes();
     if (view === 'vehiculo') {
-      // Sincronizar campos con perfil real
       (async () => {
         const r = await api.get(`/usuarios/perfil/${user.id}`).catch(() => ({ data: null }));
         const p = r.data;
@@ -119,7 +101,7 @@ export default function ResidenteDashboard({ user }) {
         nombreVisitante: nuevoVisitante.nombre,
         apellidoVisitante: nuevoVisitante.apellido,
         cedulaVisitante: nuevoVisitante.cedula,
-        placaVisitante: nuevoVisitante.placaVehiculo || 'N/A', // El backend exige placa, enviamos N/A si no tiene
+        placaVisitante: nuevoVisitante.placaVehiculo || 'N/A',
         residenteId: user.id
       });
       setSuccessMsg('Visitante creado exitosamente.');
@@ -127,7 +109,7 @@ export default function ResidenteDashboard({ user }) {
       fetchVisitantes();
       setTimeout(() => setView('visitantes'), 2000);
     } catch (err) {
-      setErrorMsg(err.response?.data?.error || 'Error al registrar visitante'); 
+      setErrorMsg(err.response?.data?.error || 'Error al registrar visitante');
     }
   };
 
@@ -143,11 +125,9 @@ export default function ResidenteDashboard({ user }) {
         placa2Vehiculo: tieneVehiculo ? placa2Vehiculo.toUpperCase() : ''
       });
       setVehiculoSuccess('Datos del vehículo actualizados correctamente.');
-      // Recargar perfil para reflejar cambios en Home
       const r = await api.get(`/usuarios/perfil/${user.id}`).catch(() => ({ data: null }));
       if (r.data) setPerfil(r.data);
     } catch (err) {
-      console.error(err);
       setVehiculoError(err.response?.data?.error || 'Error al actualizar vehículo');
     } finally {
       setVehiculoLoading(false);
@@ -160,11 +140,9 @@ export default function ResidenteDashboard({ user }) {
     setLoadingCodigo(true);
     setCodigoDinamico(null);
     try {
-      // Obtener código dinámico TOTP
       const resp = await api.get(`/visitantes/${visitante._id || visitante.id}/codigo-actual`);
       setCodigoDinamico(resp.data);
     } catch (error) {
-      console.error('Error al obtener código:', error);
       alert('Error al obtener código de acceso: ' + (error.response?.data?.error || error.message));
       setShowCodigoModal(false);
     } finally {
@@ -172,468 +150,700 @@ export default function ResidenteDashboard({ user }) {
     }
   };
 
+  /* ── Sidebar menu items ── */
+  const navItems = [
+    { id: 'home',      label: 'Mi Hogar',      icon: Home },
+    { id: 'visitantes',label: 'Mis Visitantes', icon: Users },
+    { id: 'vehiculo',  label: 'Mi Vehículo',    icon: Car },
+  ];
+
+  /* ── RENDER HOME ── */
   const renderHome = () => {
-    const visTotal = visitantes.length;
-    const visPend = visitantes.filter(v => v.estado === 'pendiente').length;
+    const visTotal  = visitantes.length;
+    const visPend   = visitantes.filter(v => v.estado === 'pendiente').length;
     const visDentro = visitantes.filter(v => v.estado === 'ingresado').length;
     const inicioSemana = Date.now() - 7 * 24 * 60 * 60 * 1000;
     const accesosSemana = misAccesos.filter(a => new Date(a.fechaHora).getTime() >= inicioSemana).length;
 
-    // Datos del perfil (con fallback al user del JWT)
-    const tieneVehiculo = perfil?.tieneVehiculo ?? user?.tieneVehiculo ?? false;
-    const placaPrincipal = perfil?.placaVehiculo || user?.placa || null;
-    const placaSecundaria = perfil?.placa2Vehiculo || null;
-    const conjuntoNombre = perfil?.conjunto?.nombre || null;
-    const estadoExpensa = perfil?.estadoExpensa || null;
+    const tieneVehiculoData  = perfil?.tieneVehiculo ?? user?.tieneVehiculo ?? false;
+    const placaPrincipal     = perfil?.placaVehiculo || user?.placa || null;
+    const placaSecundaria    = perfil?.placa2Vehiculo || null;
 
     const cards = [
-      { title: 'Mis Visitantes', value: visTotal, icon: Users, color: 'text-emerald-700', bg: 'bg-emerald-100' },
-      { title: 'Pendientes', value: visPend, icon: Clock, color: 'text-amber-700', bg: 'bg-amber-100' },
-      { title: 'Dentro Ahora', value: visDentro, icon: UserCheck, color: 'text-blue-700', bg: 'bg-blue-100' },
-      { title: 'Mis Accesos 7d', value: accesosSemana, icon: Activity, color: 'text-indigo-700', bg: 'bg-indigo-100' }
+      { title: 'Mis Visitantes', value: visTotal,       icon: Users,     accentColor: '#10B981' },
+      { title: 'Pendientes',     value: visPend,        icon: Clock,     accentColor: '#F59E0B' },
+      { title: 'Dentro Ahora',   value: visDentro,      icon: UserCheck, accentColor: '#0EA5E9' },
+      { title: 'Accesos 7d',     value: accesosSemana,  icon: Activity,  accentColor: '#6366F1' },
     ];
 
     return (
-      <div className="space-y-6">
-        {/* Banner CTA */}
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 rounded-3xl p-6 shadow-lg shadow-emerald-200 text-white relative overflow-hidden">
-          <div className="relative z-10">
-            <h2 className="text-2xl font-bold mb-2">Nuevo Visitante</h2>
-            <p className="text-emerald-100 mb-6 max-w-sm">Genera un código de acceso para que tu invitado entre sin demoras en portería.</p>
-            <div className="flex flex-wrap gap-3">
-              <button onClick={() => setView('crear')} className="bg-white text-emerald-700 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 shadow-sm hover:shadow-md transition hover:-translate-y-0.5">
-                <KeyRound size={18} /> Registrar Visitante
+      <div className="space-y-6 se-fade-in">
+
+        {/* CTA Banner */}
+        <div style={{
+          borderRadius: 18,
+          background: 'var(--se-panel-bg)',
+          border: '1px solid var(--se-panel-border)',
+          padding: '1.75rem',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          {/* Scan line */}
+          <div className="se-scanline" style={{
+            position: 'absolute', left: 0, right: 0, height: 1,
+            background: 'linear-gradient(90deg, transparent, var(--se-accent), transparent)',
+            opacity: 0.3,
+          }} />
+          {/* Shield watermark */}
+          <div style={{ position: 'absolute', right: -20, bottom: -20, opacity: 0.05, pointerEvents: 'none' }}>
+            <Shield size={160} color="#fff" />
+          </div>
+          <div style={{ position: 'relative', zIndex: 1 }}>
+            <h2 className="se-heading" style={{ fontSize: '1.375rem', fontWeight: 800, color: '#F1F5F9', marginBottom: 6 }}>
+              Nuevo Visitante
+            </h2>
+            <p style={{ fontSize: '0.875rem', color: '#64748B', marginBottom: '1.25rem', maxWidth: 400 }}>
+              Genera un código de acceso para que tu invitado entre sin demoras en portería.
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+              <button onClick={() => setView('crear')} className="se-btn-primary" style={{ borderRadius: 12 }}>
+                <KeyRound size={16} /> Registrar Visitante
               </button>
-              <button onClick={() => setView('visitantes')} className="bg-white/10 text-white border border-white/30 px-5 py-2.5 rounded-xl font-bold flex items-center gap-2 hover:bg-white/20 transition">
-                <Users size={18} /> Ver Mis Visitantes
+              <button onClick={() => setView('visitantes')} className="se-btn-ghost"
+                style={{ borderRadius: 12, borderColor: 'rgba(255,255,255,0.15)', color: '#94A3B8' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'var(--se-accent)'; e.currentTarget.style.color = 'var(--se-accent)'; e.currentTarget.style.background = 'var(--se-accent-dim)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = '#94A3B8'; e.currentTarget.style.background = 'transparent'; }}
+              >
+                <Users size={16} /> Ver Mis Visitantes
               </button>
             </div>
           </div>
-          <Shield size={180} className="absolute -right-8 -bottom-10 text-emerald-500/20 rotate-12" />
         </div>
 
-        {/* Stats cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {/* Stats grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           {cards.map((c, i) => (
-            <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition">
-              <div className="flex items-center gap-3">
-                <div className={`p-2.5 rounded-xl ${c.bg} ${c.color}`}>
-                  <c.icon size={22} />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider">{c.title}</p>
-                  <p className="text-2xl font-bold text-slate-900">{c.value}</p>
-                </div>
+            <div key={i} className="se-card se-slide-up" style={{ borderRadius: 14, padding: '1.25rem', animationDelay: `${i * 0.07}s` }}>
+              <div style={{
+                width: 40, height: 40, borderRadius: 12,
+                background: `${c.accentColor}1a`,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                marginBottom: 10,
+              }}>
+                <c.icon size={20} style={{ color: c.accentColor }} />
               </div>
+              <p className="se-heading" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--se-text-primary)', lineHeight: 1 }}>
+                {c.value}
+              </p>
+              <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginTop: 4 }}>
+                {c.title}
+              </p>
             </div>
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+
           {/* Mi vehículo / parqueadero */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Car size={20} className="text-emerald-600" /> Mi Vehículo
-            </h3>
-            {tieneVehiculo && placaPrincipal ? (
-              <>
-                <div className="bg-slate-50 rounded-xl p-4 border border-slate-100 mb-3">
-                  <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Placa Principal</p>
-                  <p className="text-2xl font-bold text-slate-800 font-mono tracking-wider">{placaPrincipal}</p>
-                </div>
-                {placaSecundaria && (
-                  <div className="bg-slate-50 rounded-xl p-4 border border-slate-100">
-                    <p className="text-xs text-slate-500 font-semibold uppercase mb-1">Placa Adicional</p>
-                    <p className="text-xl font-bold text-slate-700 font-mono">{placaSecundaria}</p>
-                  </div>
-                )}
-                {parqueaderoInfo && (
-                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100 mt-3 flex items-center gap-3">
-                    <MapPin size={20} className="text-emerald-600" />
-                    <div>
-                      <p className="text-xs text-emerald-700 font-semibold">Parqueadero asignado</p>
-                      <p className="text-lg font-bold text-emerald-800">{parqueaderoInfo.numero}</p>
-                    </div>
-                  </div>
-                )}
-                <button onClick={() => setView('vehiculo')} className="w-full mt-3 text-sm text-emerald-700 font-semibold py-2 rounded-lg hover:bg-emerald-50 transition">
-                  Editar información
-                </button>
-              </>
-            ) : (
-              <div className="bg-slate-50 rounded-xl p-6 text-center border border-dashed border-slate-200">
-                <Car size={32} className="text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-500 mb-3">No tienes vehículo registrado</p>
-                <button onClick={() => setView('vehiculo')} className="text-sm text-emerald-700 font-semibold hover:underline">
-                  Registrar vehículo
-                </button>
+          <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
+            <div className="se-section-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Car size={17} style={{ color: '#10B981' }} />
               </div>
-            )}
+              <h3 className="se-heading" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                Mi Vehículo
+              </h3>
+            </div>
+            <div style={{ padding: '1.25rem' }}>
+              {tieneVehiculoData && placaPrincipal ? (
+                <>
+                  <div style={{ background: 'var(--se-bg)', borderRadius: 12, padding: '0.875rem 1rem', border: '1px solid var(--se-border)', marginBottom: 10 }}>
+                    <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginBottom: 4 }}>Placa Principal</p>
+                    <p className="se-heading" style={{ fontSize: '1.625rem', fontWeight: 800, color: 'var(--se-text-primary)', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
+                      {placaPrincipal}
+                    </p>
+                  </div>
+                  {placaSecundaria && (
+                    <div style={{ background: 'var(--se-bg)', borderRadius: 12, padding: '0.875rem 1rem', border: '1px solid var(--se-border)', marginBottom: 10 }}>
+                      <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginBottom: 4 }}>Placa Adicional</p>
+                      <p className="se-heading" style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--se-text-secondary)', fontFamily: 'monospace' }}>
+                        {placaSecundaria}
+                      </p>
+                    </div>
+                  )}
+                  {parqueaderoInfo && (
+                    <div style={{
+                      background: 'rgba(16,185,129,0.08)',
+                      borderRadius: 12, padding: '0.75rem 1rem',
+                      border: '1px solid rgba(16,185,129,0.2)',
+                      display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+                    }}>
+                      <MapPin size={17} style={{ color: '#10B981' }} />
+                      <div>
+                        <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10B981' }}>Parqueadero Asignado</p>
+                        <p className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>{parqueaderoInfo.numero}</p>
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    onClick={() => setView('vehiculo')}
+                    style={{
+                      width: '100%', padding: '0.625rem', borderRadius: 10,
+                      fontSize: '0.8rem', fontWeight: 600,
+                      color: '#10B981', background: 'rgba(16,185,129,0.08)',
+                      border: '1px solid rgba(16,185,129,0.2)',
+                      cursor: 'pointer', transition: 'all 0.15s',
+                    }}
+                  >
+                    Editar información
+                  </button>
+                </>
+              ) : (
+                <div style={{
+                  borderRadius: 12, padding: '2rem 1rem',
+                  textAlign: 'center',
+                  border: '2px dashed var(--se-border)',
+                  background: 'var(--se-bg)',
+                }}>
+                  <Car size={32} style={{ color: 'var(--se-border)', margin: '0 auto 10px' }} />
+                  <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)', marginBottom: 10 }}>No tienes vehículo registrado</p>
+                  <button onClick={() => setView('vehiculo')} className="se-btn-primary" style={{ fontSize: '0.78rem', padding: '0.5rem 1rem', borderRadius: 8 }}>
+                    Registrar vehículo
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Mis accesos recientes */}
-          <div className="bg-white p-6 rounded-2xl border border-slate-100 shadow-sm lg:col-span-2">
-            <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
-              <Activity size={20} className="text-indigo-600" /> Mis Accesos Recientes
-              {placaPrincipal && (
-                <span className="text-xs font-normal text-slate-500 ml-1">· {placaPrincipal}</span>
+          <div className="se-card lg:col-span-2" style={{ borderRadius: 16, overflow: 'hidden' }}>
+            <div className="se-section-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(99,102,241,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Activity size={17} style={{ color: '#6366F1' }} />
+              </div>
+              <h3 className="se-heading" style={{ fontSize: '0.9rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                Mis Accesos Recientes
+                {placaPrincipal && (
+                  <span style={{ marginLeft: 8, fontSize: '0.7rem', fontWeight: 400, color: 'var(--se-text-muted)' }}>
+                    · {placaPrincipal}
+                  </span>
+                )}
+              </h3>
+            </div>
+            <div style={{ padding: '1rem 1.25rem' }}>
+              {!placaPrincipal ? (
+                <EmptyState icon={Activity} text="Registra tu vehículo para ver tus accesos" />
+              ) : misAccesos.length === 0 ? (
+                <EmptyState icon={Activity} text="Sin registros de acceso aún" />
+              ) : (
+                <div className="se-scroll space-y-2" style={{ maxHeight: 300, overflowY: 'auto', paddingRight: 4 }}>
+                  {misAccesos.slice(0, 10).map((a, i) => (
+                    <div key={i} style={{
+                      display: 'flex', alignItems: 'center', gap: 12,
+                      padding: '0.625rem 0.75rem',
+                      borderRadius: 10,
+                      background: 'var(--se-bg)',
+                      border: '1px solid var(--se-border)',
+                    }}>
+                      <div style={{
+                        width: 34, height: 34, borderRadius: '50%', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: a.tipoAcceso === 'entrada' ? 'rgba(16,185,129,0.15)' : 'rgba(239,68,68,0.12)',
+                        color: a.tipoAcceso === 'entrada' ? '#10B981' : '#EF4444',
+                      }}>
+                        <ArrowRightCircle size={15} style={a.tipoAcceso === 'salida' ? { transform: 'rotate(180deg)' } : {}} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--se-text-primary)', textTransform: 'capitalize' }}>{a.tipoAcceso}</p>
+                        <p style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)' }}>{a.placa}{a.plaza ? ` · Plaza ${a.plaza}` : ''}</p>
+                      </div>
+                      <span style={{ fontSize: '0.68rem', color: 'var(--se-text-muted)', fontFamily: 'monospace', flexShrink: 0 }}>
+                        {new Date(a.fechaHora).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               )}
-            </h3>
-            {!placaPrincipal ? (
-              <div className="bg-slate-50 rounded-xl p-6 text-center border border-dashed border-slate-200">
-                <Activity size={32} className="text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">Registra tu vehículo para ver tus accesos</p>
-              </div>
-            ) : misAccesos.length === 0 ? (
-              <div className="bg-slate-50 rounded-xl p-6 text-center border border-dashed border-slate-200">
-                <Activity size={32} className="text-slate-300 mx-auto mb-2" />
-                <p className="text-sm text-slate-500">Sin registros de acceso aún</p>
-              </div>
-            ) : (
-              <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1">
-                {misAccesos.slice(0, 10).map((a, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100 hover:bg-slate-100 transition">
-                    <div className={`w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0 ${a.tipoAcceso === 'entrada' ? 'bg-emerald-500' : 'bg-rose-500'}`}>
-                      <ArrowRightCircle size={16} className={a.tipoAcceso === 'salida' ? 'rotate-180' : ''} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-bold text-slate-800 capitalize">{a.tipoAcceso}</p>
-                      <p className="text-xs text-slate-500">{a.placa} {a.plaza ? `· Plaza ${a.plaza}` : ''}</p>
-                    </div>
-                    <span className="text-xs text-slate-500 font-mono shrink-0">
-                      {new Date(a.fechaHora).toLocaleString('es-CO', { dateStyle: 'short', timeStyle: 'short' })}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            )}
+            </div>
           </div>
         </div>
       </div>
     );
   };
 
+  /* ── RENDER VISITANTES ── */
   const renderVisitantes = () => {
-    const badge = (estado) => ({
-      pendiente: 'bg-amber-100 text-amber-700 border-amber-200',
-      ingresado: 'bg-emerald-100 text-emerald-700 border-emerald-200',
-      salido: 'bg-slate-200 text-slate-600 border-slate-300'
-    })[estado] || 'bg-slate-100 text-slate-600 border-slate-200';
+    const estadoBadge = (estado) => {
+      const map = {
+        pendiente: { bg: 'var(--se-amber-dim)',   color: '#B45309',         label: 'Pendiente' },
+        ingresado: { bg: 'rgba(16,185,129,0.10)', color: '#065F46',         label: 'Ingresado' },
+        salido:    { bg: '#F1F5F9',               color: 'var(--se-text-secondary)', label: 'Salido' },
+      };
+      return map[estado] || { bg: '#F1F5F9', color: 'var(--se-text-secondary)', label: estado || 'pendiente' };
+    };
 
     return (
-      <div className="bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-        <div className="flex justify-between items-center mb-6">
+      <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden' }}>
+        {/* Accent bar */}
+        <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
+
+        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <h2 className="text-2xl font-bold text-slate-900">Mis Visitantes / Autorizaciones</h2>
-            <p className="text-sm text-slate-500 mt-1">{visitantes.length} registrados en total</p>
+            <h2 className="se-heading" style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+              Mis Visitantes / Autorizaciones
+            </h2>
+            <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', marginTop: 2 }}>
+              {visitantes.length} registrados en total
+            </p>
           </div>
-          <button onClick={() => setView('crear')} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-emerald-700 transition">
+          <button onClick={() => setView('crear')} className="se-btn-primary" style={{ borderRadius: 10 }}>
             <Plus size={16} /> Nuevo Visitante
           </button>
         </div>
 
-        {loading ? (
-          <p className="text-slate-500 text-center py-8">Cargando...</p>
-        ) : (
-          <div className="overflow-x-auto rounded-xl">
-            <table className="w-full text-left">
-              <thead>
-                <tr className="bg-slate-50 text-slate-600 text-sm">
-                  <th className="p-3 font-semibold">Nombre</th>
-                  <th className="p-3 font-semibold">Cédula</th>
-                  <th className="p-3 font-semibold">Placa</th>
-                  <th className="p-3 font-semibold">Motivo</th>
-                  <th className="p-3 font-semibold">Estado</th>
-                  <th className="p-3 font-semibold">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {visitantes.length === 0 ? (
-                  <tr><td colSpan="6" className="p-8 text-center text-slate-500">No tienes visitantes registrados aún.</td></tr>
-                ) : visitantes.map((v, i) => (
-                  <tr key={v._id || i} className="border-b border-slate-100 hover:bg-emerald-50/40 transition">
-                    <td className="p-3 font-medium text-slate-800">{v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}</td>
-                    <td className="p-3 text-slate-600">{v.cedulaVisitante || v.cedula}</td>
-                    <td className="p-3 font-mono text-slate-700 bg-slate-50 rounded px-2">{v.placaVisitante || v.placaVehiculo || '-'}</td>
-                    <td className="p-3 text-slate-600 text-sm">{v.motivoVisita || '-'}</td>
-                    <td className="p-3">
-                      <span className={`px-2.5 py-1 rounded-full text-xs font-semibold border ${badge(v.estado)}`}>
-                        {v.estado || 'pendiente'}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <button
-                        onClick={() => handleVerCodigo(v)}
-                        className="text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-lg border border-emerald-100 text-xs font-bold flex items-center gap-2 hover:bg-emerald-100 transition"
-                      >
-                        <KeyRound size={14}/> Ver Código
-                      </button>
-                    </td>
+        <div style={{ padding: '0 0 0.5rem' }}>
+          {loading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>
+              <div style={{ width: 32, height: 32, border: '2px solid var(--se-border)', borderTopColor: 'var(--se-accent)', borderRadius: '50%', margin: '0 auto 10px', animation: 'se-arc-spin 0.8s linear infinite' }} />
+              Cargando...
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <table className="w-full se-table">
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left' }}>Nombre</th>
+                    <th style={{ textAlign: 'left' }}>Cédula</th>
+                    <th style={{ textAlign: 'left' }}>Placa</th>
+                    <th style={{ textAlign: 'left' }}>Motivo</th>
+                    <th style={{ textAlign: 'left' }}>Estado</th>
+                    <th style={{ textAlign: 'left' }}>Acciones</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+                </thead>
+                <tbody>
+                  {visitantes.length === 0 ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>
+                        No tienes visitantes registrados aún.
+                      </td>
+                    </tr>
+                  ) : visitantes.map((v, i) => {
+                    const badge = estadoBadge(v.estado);
+                    return (
+                      <tr key={v._id || i}>
+                        <td style={{ fontWeight: 600, color: 'var(--se-text-primary)' }}>
+                          {v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}
+                        </td>
+                        <td style={{ color: 'var(--se-text-secondary)' }}>{v.cedulaVisitante || v.cedula}</td>
+                        <td>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, color: 'var(--se-text-primary)', background: 'var(--se-bg)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--se-border)' }}>
+                            {v.placaVisitante || v.placaVehiculo || '—'}
+                          </span>
+                        </td>
+                        <td style={{ color: 'var(--se-text-muted)', fontSize: '0.8rem' }}>{v.motivoVisita || '—'}</td>
+                        <td>
+                          <span className="se-badge" style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
+                        </td>
+                        <td>
+                          <button
+                            onClick={() => handleVerCodigo(v)}
+                            style={{
+                              display: 'inline-flex', alignItems: 'center', gap: 6,
+                              padding: '0.4rem 0.75rem', borderRadius: 8,
+                              fontSize: '0.75rem', fontWeight: 700,
+                              background: 'var(--se-accent-dim)', color: 'var(--se-accent)',
+                              border: '1px solid rgba(14,165,233,0.25)',
+                              cursor: 'pointer', transition: 'all 0.15s',
+                            }}
+                          >
+                            <KeyRound size={13} /> Ver Código
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     );
   };
 
+  /* ── RENDER CREAR ── */
   const renderCrear = () => (
-    <div className="max-w-xl bg-white rounded-2xl p-6 shadow-sm border border-slate-100">
-       <h2 className="text-2xl font-bold text-slate-900 mb-6">Registrar Invitado</h2>
-       {errorMsg && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{errorMsg}</div>}
-       {successMsg && <div className="bg-emerald-50 text-emerald-600 p-3 rounded mb-4 text-sm">{successMsg}</div>}
-       <form onSubmit={handleCrearVisitante} className="space-y-4">
-         <div className="grid grid-cols-2 gap-4">
-           <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">Nombre</label>
-             <input type="text" required value={nuevoVisitante.nombre} onChange={e => setNuevoVisitante({...nuevoVisitante, nombre: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-           </div>
-           <div>
-             <label className="block text-sm font-medium text-slate-700 mb-1">Apellido</label>
-             <input type="text" required value={nuevoVisitante.apellido} onChange={e => setNuevoVisitante({...nuevoVisitante, apellido: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-           </div>
-         </div>
-         <div>
-           <label className="block text-sm font-medium text-slate-700 mb-1">Cédula</label>
-           <input type="text" required value={nuevoVisitante.cedula} onChange={e => setNuevoVisitante({...nuevoVisitante, cedula: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" />
-         </div>
-         <div>
-           <label className="block text-sm font-medium text-slate-700 mb-1">Placa Vehículo (Opcional)</label>
-           <input type="text" value={nuevoVisitante.placaVehiculo} onChange={e => setNuevoVisitante({...nuevoVisitante, placaVehiculo: e.target.value})} className="w-full p-2 border border-slate-300 rounded focus:ring-2 focus:ring-emerald-500" placeholder="Ej. ABC-123" />
-         </div>
-         <div className="pt-4 flex gap-3">
-           <button type="button" onClick={() => setView('home')} className="px-4 py-2 border border-slate-300 rounded hover:bg-slate-50 text-slate-700 font-medium">Cancelar</button>
-           <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 font-medium flex-1">Registrar y Generar QR</button>
-         </div>
-       </form>
-    </div>
-  );
-
-  const renderVehiculo = () => (
-    <div className="max-w-2xl bg-white p-8 rounded-2xl shadow-sm border border-slate-100">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="p-3 bg-emerald-100 text-emerald-600 rounded-lg">
-          <Car size={24} />
+    <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden', maxWidth: 560 }}>
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #0EA5E9, #10B981)' }} />
+      <div className="se-section-header" style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ width: 36, height: 36, borderRadius: 10, background: 'var(--se-accent-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <UserCheck size={18} style={{ color: 'var(--se-accent)' }} />
         </div>
-        <div>
-          <h2 className="text-2xl font-bold text-slate-800">Mi Vehículo</h2>
-          <p className="text-slate-500 text-sm">Gestiona la información de tus vehículos para el control de acceso.</p>
-        </div>
+        <h2 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+          Registrar Invitado
+        </h2>
       </div>
 
-      {vehiculoError && <div className="bg-red-50 text-red-600 p-4 rounded-xl mb-6 text-sm flex items-center gap-2 border border-red-100">{vehiculoError}</div>}
-      {vehiculoSuccess && <div className="bg-emerald-50 text-emerald-700 p-4 rounded-xl mb-6 text-sm flex items-center gap-2 border border-emerald-100">{vehiculoSuccess}</div>}
-
-      <form onSubmit={handleGuardarVehiculo} className="space-y-6">
-        <div className="pb-4 border-b border-slate-100">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input 
-              type="checkbox" 
-              checked={tieneVehiculo}
-              onChange={(e) => setTieneVehiculo(e.target.checked)}
-              className="w-5 h-5 text-emerald-600 rounded focus:ring-emerald-500 border-slate-300 transition-all"
-            />
-            <span className="font-semibold text-slate-700">Tengo vehículo(s) propio(s)</span>
-          </label>
-        </div>
-
-        {tieneVehiculo && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-700">Placa Principal</label>
-              <input 
-                type="text" 
-                value={placaVehiculo}
-                onChange={(e) => setPlacaVehiculo(e.target.value)}
-                placeholder="Ej. ABC-123"
-                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-mono uppercase bg-slate-50 focus:bg-white" 
-              />
-              <p className="text-xs text-slate-400">Sin guiones ni espacios si prefieres</p>
-            </div>
-            <div className="space-y-2">
-              <label className="block text-sm font-semibold text-slate-700">Placa Adicional <span className="font-normal text-slate-400 border border-slate-200 px-2 py-0.5 rounded text-xs ml-1">Opcional</span></label>
-              <input 
-                type="text" 
-                value={placa2Vehiculo}
-                onChange={(e) => setPlaca2Vehiculo(e.target.value)}
-                placeholder="Ej. XYZ-987"
-                className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 transition-all font-mono uppercase bg-slate-50 focus:bg-white" 
-              />
-            </div>
+      <div style={{ padding: '1.5rem' }}>
+        {errorMsg && (
+          <div style={{ background: 'var(--se-error-dim)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '0.65rem 0.875rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--se-error)', fontWeight: 600 }}>
+            {errorMsg}
+          </div>
+        )}
+        {successMsg && (
+          <div style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10, padding: '0.65rem 0.875rem', marginBottom: '1rem', fontSize: '0.8rem', color: '#065F46', fontWeight: 600 }}>
+            {successMsg}
           </div>
         )}
 
-        <div className="pt-4 flex gap-4">
-          <button 
-            type="submit" 
-            disabled={vehiculoLoading}
-            className="w-full sm:w-auto px-8 py-3 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 font-semibold shadow-sm hover:shadow transition flex justify-center items-center gap-2 disabled:opacity-75 disabled:cursor-not-allowed"
-          >
-            {vehiculoLoading ? 'Guardando...' : 'Guardar Información'}
-          </button>
-        </div>
-      </form>
+        <form onSubmit={handleCrearVisitante} className="space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label style={{ display: 'block', marginBottom: 5, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>Nombre</label>
+              <input required value={nuevoVisitante.nombre} onChange={e => setNuevoVisitante({...nuevoVisitante, nombre: e.target.value})} className="se-input" />
+            </div>
+            <div>
+              <label style={{ display: 'block', marginBottom: 5, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>Apellido</label>
+              <input required value={nuevoVisitante.apellido} onChange={e => setNuevoVisitante({...nuevoVisitante, apellido: e.target.value})} className="se-input" />
+            </div>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: 5, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>Cédula</label>
+            <input required value={nuevoVisitante.cedula} onChange={e => setNuevoVisitante({...nuevoVisitante, cedula: e.target.value})} className="se-input" />
+          </div>
+
+          <div>
+            <label style={{ display: 'block', marginBottom: 5, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>Placa Vehículo <span style={{ fontWeight: 400, textTransform: 'none', color: 'var(--se-text-muted)' }}>(Opcional)</span></label>
+            <input value={nuevoVisitante.placaVehiculo} onChange={e => setNuevoVisitante({...nuevoVisitante, placaVehiculo: e.target.value})} className="se-input" placeholder="Ej. ABC-123" />
+          </div>
+
+          <div style={{ display: 'flex', gap: 10, paddingTop: 8 }}>
+            <button type="button" onClick={() => setView('home')} className="se-btn-ghost" style={{ borderRadius: 12 }}>
+              Cancelar
+            </button>
+            <button type="submit" className="se-btn-primary" style={{ flex: 1, borderRadius: 12, justifyContent: 'center' }}>
+              Registrar y Generar QR
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 
+  /* ── RENDER VEHÍCULO ── */
+  const renderVehiculo = () => (
+    <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden', maxWidth: 640 }}>
+      <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
+      <div className="se-section-header" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(16,185,129,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Car size={20} style={{ color: '#10B981' }} />
+        </div>
+        <div>
+          <h2 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>Mi Vehículo</h2>
+          <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)' }}>Gestiona la información de tus vehículos para el control de acceso.</p>
+        </div>
+      </div>
+
+      <div style={{ padding: '1.5rem' }}>
+        {vehiculoError && (
+          <div style={{ background: 'var(--se-error-dim)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: 'var(--se-error)', fontWeight: 600 }}>
+            {vehiculoError}
+          </div>
+        )}
+        {vehiculoSuccess && (
+          <div style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#065F46', fontWeight: 600 }}>
+            {vehiculoSuccess}
+          </div>
+        )}
+
+        <form onSubmit={handleGuardarVehiculo} className="space-y-5">
+          {/* Toggle */}
+          <div style={{ paddingBottom: '1.25rem', borderBottom: '1px solid var(--se-border)' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={tieneVehiculo}
+                onChange={(e) => setTieneVehiculo(e.target.checked)}
+                style={{ width: 18, height: 18, accentColor: 'var(--se-accent)' }}
+              />
+              <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--se-text-primary)' }}>
+                Tengo vehículo(s) propio(s)
+              </span>
+            </label>
+          </div>
+
+          {tieneVehiculo && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 se-fade-in">
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>
+                  Placa Principal
+                </label>
+                <input
+                  type="text"
+                  value={placaVehiculo}
+                  onChange={(e) => setPlacaVehiculo(e.target.value)}
+                  placeholder="Ej. ABC-123"
+                  className="se-input"
+                  style={{ fontFamily: 'monospace', textTransform: 'uppercase', fontWeight: 700 }}
+                />
+                <p style={{ marginTop: 5, fontSize: '0.7rem', color: 'var(--se-text-muted)' }}>Sin guiones ni espacios si prefieres</p>
+              </div>
+              <div>
+                <label style={{ display: 'block', marginBottom: 6, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>
+                  Placa Adicional
+                  <span className="se-badge se-badge-muted ml-2" style={{ fontSize: '0.6rem' }}>Opcional</span>
+                </label>
+                <input
+                  type="text"
+                  value={placa2Vehiculo}
+                  onChange={(e) => setPlaca2Vehiculo(e.target.value)}
+                  placeholder="Ej. XYZ-987"
+                  className="se-input"
+                  style={{ fontFamily: 'monospace', textTransform: 'uppercase', fontWeight: 700 }}
+                />
+              </div>
+            </div>
+          )}
+
+          <div style={{ paddingTop: 8 }}>
+            <button
+              type="submit"
+              disabled={vehiculoLoading}
+              className="se-btn-primary"
+              style={{ borderRadius: 12, minWidth: 200 }}
+            >
+              {vehiculoLoading ? (
+                <>
+                  <div style={{ width: 16, height: 16, border: '2px solid rgba(255,255,255,0.3)', borderTopColor: '#fff', borderRadius: '50%', animation: 'se-arc-spin 0.8s linear infinite' }} />
+                  Guardando...
+                </>
+              ) : 'Guardar Información'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+
+  /* ── MAIN LAYOUT ── */
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex w-full">
-      <aside className="w-20 lg:w-64 bg-white border-r border-slate-200 flex-col fixed h-full z-10 shadow-sm transition-all overflow-hidden hidden md:flex">
-        <div className="p-6 border-b border-slate-100">
-          <Logo theme="light" subtitle="Panel Residente" />
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--se-bg)' }}>
+
+      {/* Sidebar */}
+      <aside className="hidden md:flex flex-col" style={{
+        width: 250, flexShrink: 0,
+        position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
+        background: 'var(--se-panel-bg)',
+        borderRight: '1px solid var(--se-panel-border)',
+        overflow: 'hidden',
+      }}>
+        {/* Subtle grid bg */}
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.03,
+          backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)',
+          pointerEvents: 'none',
+        }} />
+
+        {/* Logo */}
+        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative' }}>
+          <Logo theme="dark" subtitle="Panel Residente" />
         </div>
 
-        <nav className="flex-1 px-3 py-6 space-y-2">
-          <button onClick={() => setView('home')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'home' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <Home size={22} /><span className="hidden lg:block">Mi Hogar</span>
-          </button>
-          <button onClick={() => setView('visitantes')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'visitantes' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'text-slate-600 hover:bg-slate-50'}`}>
-             <Users size={22} /><span className="hidden lg:block">Mis Visitantes</span>
-          </button>
-          <button onClick={() => setView('vehiculo')} className={`flex items-center gap-3 w-full p-3 rounded-xl font-medium transition-colors ${view === 'vehiculo' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'text-slate-600 hover:bg-slate-50'}`}>
-            <Car size={22} /><span className="hidden lg:block">Mi Vehículo</span>
-          </button>
+        {/* Nav */}
+        <nav style={{ flex: 1, padding: '1rem 0.75rem', position: 'relative' }}>
+          {navItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setView(item.id)}
+              className={`se-nav-item ${view === item.id ? 'active' : ''}`}
+              style={{ marginBottom: 4 }}
+            >
+              {view === item.id && (
+                <div style={{
+                  position: 'absolute', left: 0,
+                  width: 3, height: 28,
+                  background: 'var(--se-accent)',
+                  borderRadius: '0 4px 4px 0',
+                }} />
+              )}
+              <item.icon size={19} className="se-nav-icon" />
+              <span>{item.label}</span>
+            </button>
+          ))}
         </nav>
 
-        {/* Perfil del usuario al fondo del sidebar */}
-        <div className="p-4 border-t border-slate-100">
-          <div className="flex items-center gap-3 p-3 rounded-xl bg-slate-50 border border-slate-100">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-white font-bold text-lg shadow-md shrink-0">
+        {/* User card */}
+        <div style={{ padding: '1rem', borderTop: '1px solid var(--se-panel-border)', position: 'relative' }}>
+          <div className="se-user-card">
+            <div style={{
+              width: 38, height: 38, borderRadius: 10, flexShrink: 0,
+              background: 'linear-gradient(135deg, #10B981, #0EA5E9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '1rem', fontWeight: 800, color: '#fff',
+              boxShadow: '0 2px 8px rgba(16,185,129,0.3)',
+            }}>
               {user?.nombre?.charAt(0) || 'R'}
             </div>
-            <div className="flex-1 min-w-0 hidden lg:block">
-              <p className="text-sm font-semibold text-slate-800 truncate">{user?.nombre || 'Residente'}</p>
-              <p className="text-xs text-slate-500 capitalize">{user?.rol || 'residente'}</p>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: '0.825rem', fontWeight: 700, color: '#F1F5F9', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {user?.nombre || 'Residente'}
+              </p>
+              <p style={{ fontSize: '0.7rem', color: '#64748B', textTransform: 'capitalize' }}>
+                {user?.rol || 'residente'}
+              </p>
             </div>
           </div>
         </div>
       </aside>
 
-      <main className="flex-1 md:ml-20 lg:ml-64 p-4 lg:p-8">
-        <header className="flex flex-wrap justify-between items-center gap-4 mb-8 bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-          <div className="flex items-center gap-4 min-w-0">
-            <img src={`https://ui-avatars.com/api/?name=${user?.nombre || 'User'}&background=10b981&color=fff`} alt="Profile" className="w-12 h-12 rounded-full border-2 border-white shadow-sm" />
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-slate-900 truncate">
-                Hola, {perfil?.nombre || user?.nombre || "Residente"} {perfil?.apellido || user?.apellido || ''}
-              </h1>
-              <p className="text-sm text-slate-500 truncate">
-                {perfil?.conjunto?.nombre ? `${perfil.conjunto.nombre} · ` : ''}
-                Torre {perfil?.torre || user?.torre || '-'} · Apto {perfil?.apartamento || user?.apartamento || '-'}
-              </p>
+      {/* Main content */}
+      <main style={{ flex: 1, marginLeft: 250, padding: '2rem', minWidth: 0 }}>
+
+        {/* Header */}
+        <header className="se-card" style={{
+          borderRadius: 14, overflow: 'hidden',
+          marginBottom: '2rem',
+        }}>
+          <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem 1.25rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              <img
+                src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.nombre || 'User')}&background=10b981&color=fff&bold=true`}
+                alt="Profile"
+                style={{ width: 46, height: 46, borderRadius: '50%', border: '2px solid var(--se-border)' }}
+              />
+              <div>
+                <h1 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
+                  Hola, {perfil?.nombre || user?.nombre || 'Residente'} {perfil?.apellido || user?.apellido || ''}
+                </h1>
+                <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)' }}>
+                  {perfil?.conjunto?.nombre ? `${perfil.conjunto.nombre} · ` : ''}
+                  Torre {perfil?.torre || user?.torre || '—'} · Apto {perfil?.apartamento || user?.apartamento || '—'}
+                </p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {perfil?.estadoExpensa && (
+                <span className="se-badge" style={
+                  perfil.estadoExpensa === 'al dia'
+                    ? { background: 'rgba(16,185,129,0.10)', color: '#065F46' }
+                    : { background: 'var(--se-error-dim)', color: 'var(--se-error)' }
+                }>
+                  Expensa: {perfil.estadoExpensa}
+                </span>
+              )}
+              <span className="se-badge se-badge-accent">
+                <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--se-accent)', display: 'inline-block' }} />
+                Activo
+              </span>
             </div>
           </div>
-          {perfil?.estadoExpensa && (
-            <span className={`px-3 py-1.5 rounded-full text-xs font-bold border ${
-              perfil.estadoExpensa === 'al dia'
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-rose-50 text-rose-700 border-rose-200'
-            }`}>
-              Expensa: {perfil.estadoExpensa}
-            </span>
-          )}
         </header>
 
-        {view === 'home' && renderHome()}
-        {view === 'visitantes' && renderVisitantes()}
-        {view === 'crear' && renderCrear()}
-        {view === 'vehiculo' && renderVehiculo()}
+        {/* Views */}
+        {view === 'home'      && renderHome()}
+        {view === 'visitantes'&& renderVisitantes()}
+        {view === 'crear'     && renderCrear()}
+        {view === 'vehiculo'  && renderVehiculo()}
       </main>
 
       {/* Modal Código de Acceso */}
       {showCodigoModal && selectedVisitante && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 text-white">
-              <div className="flex justify-between items-start">
+        <div style={{
+          position: 'fixed', inset: 0, zIndex: 50,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          padding: '1rem',
+          background: 'rgba(8,13,20,0.75)',
+          backdropFilter: 'blur(8px)',
+        }}>
+          <div className="se-slide-up se-card" style={{ borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
+            {/* Modal header */}
+            <div style={{ background: 'var(--se-panel-bg)', borderBottom: '1px solid var(--se-panel-border)', padding: '1.25rem 1.5rem' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                 <div>
-                  <h3 className="text-xl font-bold">Código de Acceso</h3>
-                  <p className="text-emerald-100 text-sm mt-1">
-                    {selectedVisitante.nombre || selectedVisitante.nombreVisitante} {selectedVisitante.apellido || selectedVisitante.apellidoVisitante}
+                  <h3 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: '#F1F5F9' }}>
+                    Código de Acceso
+                  </h3>
+                  <p style={{ fontSize: '0.8rem', color: '#64748B', marginTop: 2 }}>
+                    {selectedVisitante.nombre || selectedVisitante.nombreVisitante}{' '}
+                    {selectedVisitante.apellido || selectedVisitante.apellidoVisitante}
                   </p>
                 </div>
                 <button
-                  onClick={() => {
-                    setShowCodigoModal(false);
-                    setSelectedVisitante(null);
-                    setCodigoDinamico(null);
-                  }}
-                  className="text-white/80 hover:text-white transition-colors"
+                  onClick={() => { setShowCodigoModal(false); setSelectedVisitante(null); setCodigoDinamico(null); }}
+                  style={{ width: 32, height: 32, borderRadius: 8, border: '1px solid rgba(255,255,255,0.1)', background: 'rgba(255,255,255,0.05)', color: '#94A3B8', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
                 >
-                  <X size={24} />
+                  <X size={16} />
                 </button>
               </div>
             </div>
 
-            {/* Content */}
-            <div className="p-6">
+            {/* Modal body */}
+            <div style={{ padding: '1.5rem' }}>
               {loadingCodigo ? (
-                <div className="flex flex-col items-center justify-center py-8">
-                  <div className="w-12 h-12 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mb-4"></div>
-                  <p className="text-slate-500">Generando código...</p>
+                <div style={{ textAlign: 'center', padding: '2.5rem 0' }}>
+                  <div style={{ width: 40, height: 40, border: '3px solid var(--se-border)', borderTopColor: 'var(--se-accent)', borderRadius: '50%', margin: '0 auto 12px', animation: 'se-arc-spin 0.8s linear infinite' }} />
+                  <p style={{ color: 'var(--se-text-muted)', fontSize: '0.85rem' }}>Generando código...</p>
                 </div>
               ) : codigoDinamico?.codigo ? (
                 <>
-                  {/* Código TOTP */}
-                  <div className="mb-6">
-                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 border border-amber-200 rounded-xl p-6">
-                      <p className="text-amber-800 text-sm font-medium mb-3 flex items-center gap-2 justify-center">
-                        <KeyRound size={18} /> Código de Acceso Dinámico
-                      </p>
-                      <div className="flex items-center justify-center gap-2">
-                        {codigoDinamico.codigo.split('').map((digit, i) => (
-                          <span
-                            key={i}
-                            className="w-12 h-14 bg-white border-2 border-amber-300 rounded-lg flex items-center justify-center text-3xl font-bold text-amber-700 shadow-sm"
-                          >
-                            {digit}
-                          </span>
-                        ))}
-                      </div>
-                      <div className="mt-4 text-center">
-                        <p className="text-amber-600 text-sm font-medium flex items-center justify-center gap-1">
-                          <Clock size={14} /> Válido por {Math.floor((codigoDinamico.expiraEn || 600) / 60)} minutos más
-                        </p>
-                      </div>
+                  {/* TOTP display */}
+                  <div style={{
+                    background: 'var(--se-amber-dim)',
+                    border: '1px solid rgba(245,158,11,0.25)',
+                    borderRadius: 14, padding: '1.25rem',
+                    marginBottom: '1.25rem',
+                    textAlign: 'center',
+                  }}>
+                    <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#92400E', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <KeyRound size={13} /> Código Dinámico
+                    </p>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
+                      {codigoDinamico.codigo.split('').map((digit, i) => (
+                        <span key={i} style={{
+                          width: 42, height: 50, borderRadius: 10,
+                          background: '#fff',
+                          border: '2px solid rgba(245,158,11,0.4)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: '1.5rem', fontWeight: 800,
+                          color: '#92400E',
+                          boxShadow: '0 2px 8px rgba(245,158,11,0.12)',
+                        }}>
+                          {digit}
+                        </span>
+                      ))}
                     </div>
+                    <p style={{ marginTop: 12, fontSize: '0.75rem', color: '#92400E', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                      <Clock size={12} /> Válido por {Math.floor((codigoDinamico.expiraEn || 600) / 60)} minutos más
+                    </p>
                   </div>
 
                   {/* Instrucciones */}
-                  <div className="bg-emerald-50 rounded-xl p-4 border border-emerald-100">
-                    <p className="text-emerald-800 text-sm font-medium mb-2">📱 Instrucciones</p>
-                    <ul className="text-emerald-700 text-sm space-y-2">
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">1.</span>
-                        Comparte este código de 6 dígitos con tu visitante (WhatsApp, SMS, etc.)
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">2.</span>
-                        El visitante ingresa a "Acceso Visitante" en la página principal
-                      </li>
-                      <li className="flex items-start gap-2">
-                        <span className="text-emerald-500 font-bold">3.</span>
-                        Ingresa su cédula y este código para generar su QR de acceso
-                      </li>
-                    </ul>
+                  <div style={{ background: 'var(--se-accent-dim)', border: '1px solid rgba(14,165,233,0.2)', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1.25rem' }}>
+                    <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369A1', marginBottom: 8 }}>Instrucciones</p>
+                    <ol style={{ paddingLeft: '1.25rem', margin: 0 }}>
+                      {[
+                        'Comparte este código con tu visitante (WhatsApp, SMS, etc.)',
+                        'El visitante ingresa a "Acceso Visitante" en la página principal',
+                        'Ingresa su cédula y este código para generar su QR de acceso',
+                      ].map((t, i) => (
+                        <li key={i} style={{ fontSize: '0.75rem', color: '#0369A1', marginBottom: 6, lineHeight: 1.5 }}>{t}</li>
+                      ))}
+                    </ol>
                   </div>
 
-                  {/* Botón cerrar */}
                   <button
-                    onClick={() => {
-                      setShowCodigoModal(false);
-                      setSelectedVisitante(null);
-                      setCodigoDinamico(null);
-                    }}
-                    className="w-full mt-4 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold transition-colors"
+                    onClick={() => { setShowCodigoModal(false); setSelectedVisitante(null); setCodigoDinamico(null); }}
+                    className="se-btn-ghost"
+                    style={{ width: '100%', justifyContent: 'center', borderRadius: 12 }}
                   >
                     Cerrar
                   </button>
                 </>
               ) : (
-                <div className="text-center py-8 text-slate-500">
+                <div style={{ textAlign: 'center', padding: '2.5rem 0', color: 'var(--se-text-muted)', fontSize: '0.85rem' }}>
                   No se pudo generar el código. Intenta de nuevo.
                 </div>
               )}
@@ -641,6 +851,21 @@ export default function ResidenteDashboard({ user }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/* ── Helper: empty state ── */
+function EmptyState({ icon: Icon, text }) {
+  return (
+    <div style={{
+      borderRadius: 12, padding: '2.5rem 1rem',
+      textAlign: 'center',
+      border: '2px dashed var(--se-border)',
+      background: 'var(--se-bg)',
+    }}>
+      <Icon size={30} style={{ color: 'var(--se-border)', margin: '0 auto 10px' }} />
+      <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>{text}</p>
     </div>
   );
 }

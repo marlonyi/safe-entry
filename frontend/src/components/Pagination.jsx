@@ -1,14 +1,15 @@
 import React from 'react';
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 
 /**
- * Componente de paginación reutilizable.
+ * Componente de paginación — SafeEntry Design System
  * Props:
- *  - currentPage:   página actual (1-indexed)
- *  - totalItems:    total de items
- *  - pageSize:      items por página (default 10)
- *  - onPageChange:  (newPage) => void
+ *  - currentPage:       página actual (1-indexed)
+ *  - totalItems:        total de items
+ *  - pageSize:          items por página (default 10)
+ *  - onPageChange:      (newPage) => void
  *  - onPageSizeChange?: (newSize) => void  (opcional, muestra selector)
- *  - pageSizeOptions?: number[] (default [10, 20, 50, 100])
+ *  - pageSizeOptions?:  number[] (default [10, 20, 50, 100])
  */
 export default function Pagination({
   currentPage,
@@ -22,7 +23,6 @@ export default function Pagination({
   const desde = totalItems === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const hasta = Math.min(currentPage * pageSize, totalItems);
 
-  // Calcular el rango de páginas a mostrar (máximo 5 botones numerados)
   const generarPaginas = () => {
     const paginas = [];
     let inicio = Math.max(1, currentPage - 2);
@@ -37,77 +37,121 @@ export default function Pagination({
     onPageChange(p);
   };
 
-  // Si no hay items: no mostrar. Pero si hay aunque sea uno, mostramos la barra.
   if (totalItems === 0) return null;
-  // Si hay solo 1 página pero pocos items, igual mostrar el indicador y el selector de tamaño.
 
   return (
-    <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mt-4 px-4 py-3 bg-gradient-to-r from-slate-50 to-blue-50 border border-slate-200 rounded-xl shadow-sm">
-      <div className="text-sm text-slate-700 font-medium">
-        📋 Mostrando <b className="text-blue-600">{desde}</b>–<b className="text-blue-600">{hasta}</b> de <b className="text-blue-600">{totalItems}</b> registros
-      </div>
+    <div
+      className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mt-4 px-4 py-3 rounded-xl"
+      style={{
+        background: '#F8FAFC',
+        border: '1px solid var(--se-border)',
+      }}
+    >
+      {/* Contador */}
+      <p className="text-xs" style={{ color: 'var(--se-text-secondary)', fontFamily: 'DM Sans, sans-serif' }}>
+        Mostrando{' '}
+        <span className="font-bold" style={{ color: 'var(--se-accent)' }}>{desde}</span>
+        {' '}–{' '}
+        <span className="font-bold" style={{ color: 'var(--se-accent)' }}>{hasta}</span>
+        {' '}de{' '}
+        <span className="font-bold" style={{ color: 'var(--se-text-primary)' }}>{totalItems}</span>
+        {' '}registros
+      </p>
 
       <div className="flex items-center gap-2">
+        {/* Selector de tamaño */}
         {onPageSizeChange && (
           <select
             value={pageSize}
             onChange={(e) => onPageSizeChange(Number(e.target.value))}
-            className="text-xs border border-slate-200 rounded-lg px-2 py-1.5 bg-white"
+            className="se-input"
+            style={{ width: 'auto', padding: '0.35rem 0.625rem', fontSize: '0.75rem' }}
           >
             {pageSizeOptions.map((n) => (
-              <option key={n} value={n}>{n} / página</option>
+              <option key={n} value={n}>{n} / pág</option>
             ))}
           </select>
         )}
 
+        {/* Botones de navegación */}
         <div className="flex items-center gap-1">
-          <button
-            onClick={() => ir(1)}
-            disabled={currentPage === 1}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Primera página"
-          >
-            «
-          </button>
-          <button
-            onClick={() => ir(currentPage - 1)}
-            disabled={currentPage === 1}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            ‹
-          </button>
+          <NavBtn onClick={() => ir(1)} disabled={currentPage === 1} title="Primera">
+            <ChevronsLeft size={14} />
+          </NavBtn>
+          <NavBtn onClick={() => ir(currentPage - 1)} disabled={currentPage === 1} title="Anterior">
+            <ChevronLeft size={14} />
+          </NavBtn>
 
           {generarPaginas().map((p) => (
             <button
               key={p}
               onClick={() => ir(p)}
-              className={`min-w-[32px] px-2.5 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+              style={
                 p === currentPage
-                  ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white border-transparent shadow'
-                  : 'border-slate-200 text-slate-700 hover:bg-slate-50'
-              }`}
+                  ? {
+                      minWidth: 32,
+                      padding: '0.35rem 0.5rem',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      background: 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)',
+                      color: '#fff',
+                      border: 'none',
+                      boxShadow: '0 2px 8px rgba(14,165,233,0.35)',
+                      cursor: 'pointer',
+                    }
+                  : {
+                      minWidth: 32,
+                      padding: '0.35rem 0.5rem',
+                      borderRadius: '0.5rem',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      background: '#fff',
+                      color: 'var(--se-text-secondary)',
+                      border: '1px solid var(--se-border)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }
+              }
             >
               {p}
             </button>
           ))}
 
-          <button
-            onClick={() => ir(currentPage + 1)}
-            disabled={currentPage >= totalPages}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            ›
-          </button>
-          <button
-            onClick={() => ir(totalPages)}
-            disabled={currentPage >= totalPages}
-            className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed"
-            title="Última página"
-          >
-            »
-          </button>
+          <NavBtn onClick={() => ir(currentPage + 1)} disabled={currentPage >= totalPages} title="Siguiente">
+            <ChevronRight size={14} />
+          </NavBtn>
+          <NavBtn onClick={() => ir(totalPages)} disabled={currentPage >= totalPages} title="Última">
+            <ChevronsRight size={14} />
+          </NavBtn>
         </div>
       </div>
     </div>
+  );
+}
+
+function NavBtn({ onClick, disabled, children, title }) {
+  return (
+    <button
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 28,
+        borderRadius: '0.5rem',
+        border: '1px solid var(--se-border)',
+        background: disabled ? '#F1F5F9' : '#fff',
+        color: disabled ? '#CBD5E1' : 'var(--se-text-secondary)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        transition: 'all 0.15s',
+        fontSize: '0.75rem',
+      }}
+    >
+      {children}
+    </button>
   );
 }

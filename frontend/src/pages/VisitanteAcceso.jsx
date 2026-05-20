@@ -15,17 +15,14 @@ export default function VisitanteAcceso({ onBack }) {
 
   const inputRefs = useRef([]);
 
-  // Focus primer input de código al montar
   useEffect(() => {
     if (step === 'form' && inputRefs.current[0]) {
       inputRefs.current[0].focus();
     }
   }, [step]);
 
-  // Manejar input individual de cada dígito del código
   const handleCodigoChange = (index, value) => {
     if (value.length > 1) {
-      // Si se pega un código completo
       const digits = value.replace(/\D/g, '').slice(0, 6).split('');
       const newCodigo = [...codigo];
       digits.forEach((d, i) => {
@@ -36,16 +33,11 @@ export default function VisitanteAcceso({ onBack }) {
       inputRefs.current[nextIdx]?.focus();
       return;
     }
-
     if (!/^\d*$/.test(value)) return;
-
     const newCodigo = [...codigo];
     newCodigo[index] = value;
     setCodigo(newCodigo);
-
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
+    if (value && index < 5) inputRefs.current[index + 1]?.focus();
   };
 
   const handleKeyDown = (index, e) => {
@@ -57,124 +49,208 @@ export default function VisitanteAcceso({ onBack }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     const codigoCompleto = codigo.join('');
-
-    if (!cedula.trim()) {
-      setError('Por favor ingresa tu número de cédula.');
-      return;
-    }
-    if (codigoCompleto.length !== 6) {
-      setError('El código debe tener 6 dígitos.');
-      return;
-    }
+    if (!cedula.trim()) { setError('Por favor ingresa tu número de cédula.'); return; }
+    if (codigoCompleto.length !== 6) { setError('El código debe tener 6 dígitos.'); return; }
 
     setLoading(true);
     setError('');
-
     try {
-      // Usar axios directamente (sin interceptor de api.js que corrompe esta respuesta)
       const resp = await axios.post(`${API_BASE}/visitantes/verificar-acceso`, {
         cedula: cedula.trim(),
         codigo: codigoCompleto
       });
-
       const data = resp.data;
-
-      if (data.success === false) {
-        setError(data.error || 'Error al verificar acceso.');
-        return;
-      }
-
-      // Éxito: construir resultado con QR
-      setResultado({
-        visitante: data.visitante,
-        qr: data.qr
-      });
+      if (data.success === false) { setError(data.error || 'Error al verificar acceso.'); return; }
+      setResultado({ visitante: data.visitante, qr: data.qr });
       setStep('success');
     } catch (err) {
-      const msg = err.response?.data?.error || 'Error al verificar. Intenta de nuevo.';
-      setError(msg);
+      setError(err.response?.data?.error || 'Error al verificar. Intenta de nuevo.');
     } finally {
       setLoading(false);
     }
   };
 
+  /* ─── FORM ─── */
   const renderForm = () => (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-4 se-fade-in"
+      style={{ background: 'var(--se-bg)', position: 'relative', overflow: 'hidden' }}>
+
       {/* Fondo decorativo */}
-      <div className="absolute top-0 left-0 w-full h-[420px] bg-gradient-to-br from-teal-600 via-emerald-600 to-green-700 rounded-b-[80px] -translate-y-4 z-0">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-20 right-20 w-72 h-72 bg-white rounded-full blur-3xl"></div>
-          <div className="absolute bottom-10 left-10 w-48 h-48 bg-teal-300 rounded-full blur-3xl"></div>
+      <div style={{
+        position: 'absolute', inset: 0, pointerEvents: 'none',
+        background: 'radial-gradient(ellipse 70% 50% at 50% -10%, rgba(14,165,233,0.12) 0%, transparent 70%)',
+      }} />
+
+      {/* Panel izquierdo oscuro — decorativo (solo md+) */}
+      <div className="hidden md:block" style={{
+        position: 'fixed', left: 0, top: 0, bottom: 0, width: '38%',
+        background: 'var(--se-panel-bg)',
+        borderRight: '1px solid var(--se-panel-border)',
+        zIndex: 0,
+      }}>
+        {/* Scan line */}
+        <div className="se-scanline" style={{
+          position: 'absolute', left: 0, right: 0, height: 2,
+          background: 'linear-gradient(90deg, transparent, var(--se-accent), transparent)',
+          opacity: 0.5,
+        }} />
+        {/* Decorative grid */}
+        <div style={{
+          position: 'absolute', inset: 0, opacity: 0.04,
+          backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 40px)',
+        }} />
+        {/* Shield mark */}
+        <div style={{
+          position: 'absolute', bottom: '8%', left: '50%', transform: 'translateX(-50%)',
+          opacity: 0.04,
+        }}>
+          <Shield size={220} color="#fff" />
+        </div>
+
+        {/* Brand text */}
+        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
+          <div style={{
+            width: 64, height: 64,
+            borderRadius: 16,
+            background: 'rgba(14,165,233,0.15)',
+            border: '1px solid rgba(14,165,233,0.3)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            margin: '0 auto 1rem',
+          }}>
+            <Shield size={30} color="var(--se-accent)" />
+          </div>
+          <p className="se-heading" style={{ color: '#F1F5F9', fontSize: '1.25rem', fontWeight: 700, marginBottom: 4 }}>
+            SafeEntry
+          </p>
+          <p style={{ color: '#475569', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            Control de Acceso
+          </p>
         </div>
       </div>
 
-      <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl relative z-10 overflow-hidden border border-slate-100">
-        {/* Header */}
-        <div className="bg-gradient-to-br from-emerald-600 to-teal-700 p-6 pb-10 text-white relative overflow-hidden">
-          <div className="absolute inset-0 opacity-10 pointer-events-none">
-            <Shield size={200} className="absolute -right-10 -bottom-12 rotate-12" />
-          </div>
+      {/* Card central */}
+      <div className="se-slide-up" style={{
+        position: 'relative', zIndex: 1,
+        background: 'var(--se-surface)',
+        borderRadius: 20,
+        boxShadow: '0 24px 80px rgba(0,0,0,0.12)',
+        border: '1px solid var(--se-border)',
+        width: '100%', maxWidth: 440,
+        overflow: 'hidden',
+      }}>
+        {/* Accent top bar */}
+        <div style={{ height: 3, background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
+
+        {/* Card header */}
+        <div style={{ padding: '1.75rem 1.75rem 1.25rem' }}>
           <button
             type="button"
             onClick={onBack}
-            className="relative z-10 flex items-center gap-2 text-emerald-100 hover:text-white transition mb-4 text-sm font-medium group cursor-pointer"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 6,
+              fontSize: '0.8rem', fontWeight: 600,
+              color: 'var(--se-text-muted)',
+              background: 'none', border: 'none', cursor: 'pointer',
+              marginBottom: '1.25rem',
+              transition: 'color 0.15s',
+            }}
+            onMouseEnter={e => e.currentTarget.style.color = 'var(--se-accent)'}
+            onMouseLeave={e => e.currentTarget.style.color = 'var(--se-text-muted)'}
           >
-            <ArrowLeft size={16} className="group-hover:-translate-x-0.5 transition-transform" />
+            <ArrowLeft size={14} />
             Volver al inicio
           </button>
-          <div className="relative z-10 flex items-center gap-3 mb-3">
-            <div className="w-12 h-12 bg-white/20 backdrop-blur rounded-xl flex items-center justify-center">
-              <Fingerprint size={26} className="text-white" />
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14,
+              background: 'var(--se-accent-dim)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              flexShrink: 0,
+            }}>
+              <Fingerprint size={24} style={{ color: 'var(--se-accent)' }} />
             </div>
             <div>
-              <h1 className="text-2xl font-bold">Acceso Visitante</h1>
-              <p className="text-emerald-100 text-sm">Ingresa con tu código de invitación</p>
+              <h1 className="se-heading" style={{ fontSize: '1.375rem', fontWeight: 800, color: 'var(--se-text-primary)', marginBottom: 2 }}>
+                Acceso Visitante
+              </h1>
+              <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>
+                Ingresa con tu código de invitación
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Formulario */}
-        <form onSubmit={handleSubmit} className="p-6 -mt-4">
-          <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-6 flex items-start gap-3">
-            <KeyRound size={18} className="text-emerald-600 mt-0.5 shrink-0" />
-            <p className="text-emerald-800 text-xs leading-relaxed">
-              Ingresa tu <strong>cédula</strong> y el <strong>código de 6 dígitos</strong> que te compartió el residente. El código cambia cada 10 minutos.
+        {/* Form body */}
+        <form onSubmit={handleSubmit} style={{ padding: '0 1.75rem 1.75rem' }}>
+
+          {/* Info hint */}
+          <div style={{
+            background: 'var(--se-accent-dim)',
+            border: '1px solid rgba(14,165,233,0.2)',
+            borderRadius: 12,
+            padding: '0.75rem 1rem',
+            display: 'flex', alignItems: 'flex-start', gap: 10,
+            marginBottom: '1.25rem',
+          }}>
+            <KeyRound size={16} style={{ color: 'var(--se-accent)', marginTop: 1, flexShrink: 0 }} />
+            <p style={{ fontSize: '0.75rem', color: '#0369A1', lineHeight: 1.5 }}>
+              Ingresa tu <strong>cédula</strong> y el <strong>código de 6 dígitos</strong> que te compartió el residente.
+              El código cambia cada 10 minutos.
             </p>
           </div>
 
+          {/* Error */}
           {error && (
-            <div className="bg-red-50 border border-red-100 rounded-xl p-3 mb-5 flex items-center gap-2">
-              <AlertCircle size={16} className="text-red-500 shrink-0" />
-              <p className="text-red-700 text-sm font-medium">{error}</p>
+            <div style={{
+              background: 'var(--se-error-dim)',
+              border: '1px solid rgba(239,68,68,0.2)',
+              borderRadius: 10, padding: '0.65rem 0.875rem',
+              display: 'flex', alignItems: 'center', gap: 8,
+              marginBottom: '1rem',
+            }}>
+              <AlertCircle size={15} style={{ color: 'var(--se-error)', flexShrink: 0 }} />
+              <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--se-error)' }}>{error}</p>
             </div>
           )}
 
           {/* Cédula */}
-          <div className="mb-5">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+          <div style={{ marginBottom: '1.25rem' }}>
+            <label style={{
+              display: 'block', marginBottom: 6,
+              fontSize: '0.7rem', fontWeight: 700,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--se-text-secondary)',
+            }}>
               Cédula de Identidad
             </label>
-            <div className="relative">
-              <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                <UserCheck size={18} className="text-slate-400" />
+            <div style={{ position: 'relative' }}>
+              <div style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }}>
+                <UserCheck size={17} style={{ color: 'var(--se-text-muted)' }} />
               </div>
               <input
                 type="text"
                 inputMode="numeric"
                 value={cedula}
                 onChange={(e) => setCedula(e.target.value)}
-                className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/50 focus:border-emerald-500 transition-all text-slate-700 font-medium"
                 placeholder="Ej: 1010101010"
+                className="se-input"
+                style={{ paddingLeft: '2.5rem' }}
               />
             </div>
           </div>
 
-          {/* Código de 6 dígitos */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">
+          {/* Código 6 dígitos */}
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label style={{
+              display: 'block', marginBottom: 6,
+              fontSize: '0.7rem', fontWeight: 700,
+              letterSpacing: '0.06em', textTransform: 'uppercase',
+              color: 'var(--se-text-secondary)',
+            }}>
               Código de Acceso
             </label>
-            <div className="flex gap-2 justify-between">
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
               {codigo.map((digit, i) => (
                 <input
                   key={i}
@@ -186,29 +262,47 @@ export default function VisitanteAcceso({ onBack }) {
                   onChange={(e) => handleCodigoChange(i, e.target.value)}
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onFocus={(e) => e.target.select()}
-                  className="w-12 h-14 text-center text-xl font-bold bg-slate-50 border border-slate-200 rounded-xl text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 focus:bg-white transition-all"
+                  style={{
+                    width: 44, height: 52,
+                    textAlign: 'center',
+                    fontSize: '1.375rem', fontWeight: 800,
+                    background: digit ? 'var(--se-accent-dim)' : 'var(--se-bg)',
+                    border: `2px solid ${digit ? 'var(--se-accent)' : 'var(--se-border)'}`,
+                    borderRadius: 12,
+                    color: 'var(--se-text-primary)',
+                    outline: 'none',
+                    transition: 'all 0.15s',
+                    boxShadow: digit ? '0 0 0 3px var(--se-accent-dim)' : 'none',
+                  }}
                 />
               ))}
             </div>
-            <p className="text-slate-400 text-xs mt-2 flex items-center gap-1">
-              <Clock size={12} /> El código cambia cada 10 min. Solicita uno nuevo si expiró.
+            <p style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--se-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Clock size={11} /> El código cambia cada 10 min. Solicita uno nuevo si expiró.
             </p>
           </div>
 
-          {/* Botón de acceso */}
+          {/* Submit */}
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:opacity-70 text-white font-bold rounded-xl shadow-lg shadow-emerald-200 transition-all flex justify-center items-center gap-2 group"
+            className="se-btn-primary"
+            style={{ width: '100%', padding: '0.85rem', fontSize: '0.9rem', borderRadius: 14 }}
           >
             {loading ? (
               <>
-                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                <div style={{
+                  width: 18, height: 18,
+                  border: '2px solid rgba(255,255,255,0.3)',
+                  borderTopColor: '#fff',
+                  borderRadius: '50%',
+                  animation: 'se-arc-spin 0.8s linear infinite',
+                }} />
                 Verificando...
               </>
             ) : (
               <>
-                <Shield size={18} />
+                <Shield size={17} />
                 Verificar Acceso
               </>
             )}
@@ -218,87 +312,133 @@ export default function VisitanteAcceso({ onBack }) {
     </div>
   );
 
+  /* ─── SUCCESS ─── */
   const renderSuccess = () => {
     const baseUrl = window.location.origin;
     const qrUrl = resultado?.qr?.url || `${baseUrl}/verificar/${resultado?.qr?.token}`;
 
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4 relative overflow-hidden">
-        {/* Fondo decorativo éxito */}
-        <div className="absolute top-0 left-0 w-full h-[420px] bg-gradient-to-br from-emerald-500 via-green-500 to-teal-600 rounded-b-[80px] -translate-y-4 z-0">
-          <div className="absolute inset-0 opacity-10">
-            <div className="absolute top-20 right-20 w-72 h-72 bg-white rounded-full blur-3xl"></div>
-          </div>
-        </div>
+      <div className="min-h-screen flex items-center justify-center p-4 se-fade-in"
+        style={{ background: 'var(--se-bg)', position: 'relative', overflow: 'hidden' }}>
 
-        <div className="bg-white max-w-md w-full rounded-3xl shadow-2xl relative z-10 overflow-hidden border border-slate-100">
-          {/* Header éxito */}
-          <div className="bg-gradient-to-br from-emerald-500 to-green-600 p-6 text-white text-center relative overflow-hidden">
-            <div className="absolute inset-0 opacity-10 pointer-events-none">
-              <CheckCircle2 size={200} className="absolute -right-10 -top-10" />
+        <div style={{
+          position: 'absolute', inset: 0, pointerEvents: 'none',
+          background: 'radial-gradient(ellipse 60% 40% at 50% 0%, rgba(16,185,129,0.10) 0%, transparent 65%)',
+        }} />
+
+        <div className="se-slide-up" style={{
+          position: 'relative', zIndex: 1,
+          background: 'var(--se-surface)',
+          borderRadius: 20,
+          boxShadow: '0 24px 80px rgba(0,0,0,0.12)',
+          border: '1px solid var(--se-border)',
+          width: '100%', maxWidth: 440,
+          overflow: 'hidden',
+        }}>
+          {/* Accent top bar — success */}
+          <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
+
+          {/* Success header */}
+          <div style={{
+            background: 'var(--se-panel-bg)',
+            borderBottom: '1px solid var(--se-panel-border)',
+            padding: '2rem 1.75rem',
+            textAlign: 'center',
+          }}>
+            <div style={{
+              width: 64, height: 64, borderRadius: 18,
+              background: 'rgba(16,185,129,0.15)',
+              border: '1px solid rgba(16,185,129,0.3)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              margin: '0 auto 1rem',
+            }}>
+              <CheckCircle2 size={32} style={{ color: '#10B981' }} />
             </div>
-            <div className="relative z-10">
-              <div className="w-16 h-16 bg-white/20 backdrop-blur rounded-2xl flex items-center justify-center mx-auto mb-3">
-                <CheckCircle2 size={36} className="text-white" />
-              </div>
-              <h2 className="text-2xl font-bold mb-1">¡Acceso Autorizado!</h2>
-              <p className="text-emerald-100 text-sm">Presenta este código QR en portería</p>
-            </div>
+            <h2 className="se-heading" style={{ fontSize: '1.5rem', fontWeight: 800, color: '#F1F5F9', marginBottom: 4 }}>
+              Acceso Autorizado
+            </h2>
+            <p style={{ fontSize: '0.85rem', color: '#64748B' }}>
+              Presenta este código QR en portería
+            </p>
           </div>
 
-          {/* Contenido QR */}
-          <div className="p-6 text-center">
-            {/* Info del visitante */}
-            <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-100">
-              <p className="text-slate-500 text-xs mb-1 uppercase tracking-wider font-semibold">Visitante</p>
-              <p className="text-slate-900 text-lg font-bold">
+          {/* QR content */}
+          <div style={{ padding: '1.5rem 1.75rem 1.75rem' }}>
+
+            {/* Info visitante */}
+            <div style={{
+              background: 'var(--se-bg)',
+              border: '1px solid var(--se-border)',
+              borderRadius: 12,
+              padding: '0.875rem 1rem',
+              marginBottom: '1.25rem',
+            }}>
+              <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginBottom: 4 }}>
+                Visitante
+              </p>
+              <p className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
                 {resultado?.visitante?.nombre} {resultado?.visitante?.apellido}
               </p>
-              <p className="text-slate-500 text-sm">
+              <p style={{ fontSize: '0.8rem', color: 'var(--se-text-secondary)', marginTop: 2 }}>
                 Cédula: {resultado?.visitante?.cedula}
               </p>
               {resultado?.visitante?.placa && (
-                <p className="text-slate-500 text-sm font-mono">
+                <p style={{ fontSize: '0.8rem', color: 'var(--se-text-secondary)', fontFamily: 'monospace' }}>
                   Placa: {resultado.visitante.placa}
                 </p>
               )}
             </div>
 
             {/* QR Code */}
-            <div className="bg-white rounded-2xl p-6 border-2 border-emerald-200 shadow-sm inline-block mb-4">
-              <QRCodeSVG
-                value={qrUrl}
-                size={200}
-                level="H"
-                includeMargin={true}
-                fgColor="#064e3b"
-                bgColor="#ffffff"
-              />
+            <div style={{ textAlign: 'center', marginBottom: '1rem' }}>
+              <div style={{
+                display: 'inline-block',
+                padding: '1rem',
+                borderRadius: 16,
+                border: '2px solid rgba(14,165,233,0.25)',
+                background: '#fff',
+                boxShadow: '0 4px 20px rgba(14,165,233,0.12)',
+              }}>
+                <QRCodeSVG
+                  value={qrUrl}
+                  size={190}
+                  level="H"
+                  includeMargin={true}
+                  fgColor="#0F1923"
+                  bgColor="#ffffff"
+                />
+              </div>
             </div>
 
             {/* Expiración */}
             {resultado?.qr?.expiracion && (
-              <div className="flex items-center justify-center gap-2 text-sm text-slate-500 mb-4">
-                <Clock size={14} className="text-emerald-500" />
-                <span>
-                  Válido hasta: {new Date(resultado.qr.expiracion).toLocaleString('es-CO', {
-                    dateStyle: 'medium',
-                    timeStyle: 'short'
-                  })}
-                </span>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                fontSize: '0.78rem', color: 'var(--se-text-muted)',
+                marginBottom: '1rem',
+              }}>
+                <Clock size={13} style={{ color: 'var(--se-accent)' }} />
+                Válido hasta: {new Date(resultado.qr.expiracion).toLocaleString('es-CO', { dateStyle: 'medium', timeStyle: 'short' })}
               </div>
             )}
 
             {/* Instrucciones */}
-            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-4 mb-5">
-              <p className="text-emerald-800 text-sm font-medium mb-1">📱 Instrucciones</p>
-              <p className="text-emerald-700 text-xs leading-relaxed">
+            <div style={{
+              background: 'var(--se-accent-dim)',
+              border: '1px solid rgba(14,165,233,0.2)',
+              borderRadius: 12, padding: '0.875rem 1rem',
+              marginBottom: '1.25rem',
+            }}>
+              <p style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369A1', marginBottom: 6, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <QrCode size={14} /> Instrucciones
+              </p>
+              <p style={{ fontSize: '0.75rem', color: '#0369A1', lineHeight: 1.6 }}>
                 Muestra esta pantalla al portero cuando llegues al conjunto. El código QR será escaneado para registrar tu ingreso.
               </p>
             </div>
 
-            {/* Botones */}
-            <div className="flex gap-3">
+            {/* Acciones */}
+            <div style={{ display: 'flex', gap: 10 }}>
               <button
                 onClick={() => {
                   setStep('form');
@@ -307,13 +447,15 @@ export default function VisitanteAcceso({ onBack }) {
                   setResultado(null);
                   setError('');
                 }}
-                className="flex-1 py-3 border border-slate-200 rounded-xl text-slate-700 font-semibold hover:bg-slate-50 transition text-sm"
+                className="se-btn-ghost"
+                style={{ flex: 1, justifyContent: 'center', borderRadius: 12 }}
               >
                 Nueva consulta
               </button>
               <button
                 onClick={onBack}
-                className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition text-sm"
+                className="se-btn-primary"
+                style={{ flex: 1, justifyContent: 'center', borderRadius: 12 }}
               >
                 Ir al inicio
               </button>

@@ -1,0 +1,279 @@
+/* ============================================================
+   SafeEntry Design System — Global CSS
+   Compartido por todos los dashboards / vistas.
+   Importar desde main.jsx o App.jsx:
+     import './styles/design-system.css';
+   ============================================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
+
+/* ── Tokens de diseño ── */
+:root {
+  --se-bg:            #F7F8FA;
+  --se-surface:       #FFFFFF;
+  --se-border:        #E2E6ED;
+  --se-border-focus:  #0EA5E9;
+  --se-text-primary:  #0F1923;
+  --se-text-secondary:#64748B;
+  --se-text-muted:    #94A3B8;
+  --se-accent:        #0EA5E9;
+  --se-accent-dim:    rgba(14,165,233,0.12);
+  --se-accent-glow:   rgba(14,165,233,0.35);
+  --se-amber:         #F59E0B;
+  --se-amber-dim:     rgba(245,158,11,0.10);
+  --se-error:         #EF4444;
+  --se-error-dim:     rgba(239,68,68,0.08);
+  --se-panel-bg:      #080D14;
+  --se-panel-mid:     #0D1520;
+  --se-panel-border:  rgba(14,165,233,0.12);
+  --se-success:       #10B981;
+  --se-success-dim:   rgba(16,185,129,0.10);
+}
+
+/* ── Base typography ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  font-family: 'DM Sans', sans-serif;
+  background: var(--se-bg);
+  color: var(--se-text-primary);
+}
+
+.se-heading {
+  font-family: 'Syne', sans-serif;
+}
+
+/* ── Keyframes ── */
+
+/* Radar pulse behind logo */
+@keyframes se-radar-ring {
+  0%   { transform: scale(0.55); opacity: 0.55; }
+  100% { transform: scale(2.2);  opacity: 0; }
+}
+.se-radar-ring {
+  animation: se-radar-ring 3.2s ease-out infinite;
+}
+.se-radar-ring:nth-child(2) { animation-delay: 1.05s; }
+.se-radar-ring:nth-child(3) { animation-delay: 2.1s;  }
+
+/* Slow rotating arc */
+@keyframes se-arc-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.se-arc-spin     { animation: se-arc-spin 18s linear infinite; }
+.se-arc-spin-rev { animation: se-arc-spin 26s linear infinite reverse; }
+
+/* Scan line sweep */
+@keyframes se-scanline {
+  0%   { top: -6%;  opacity: 0; }
+  8%   { opacity: 0.6; }
+  92%  { opacity: 0.6; }
+  100% { top: 106%; opacity: 0; }
+}
+.se-scanline { animation: se-scanline 7s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+
+/* Staggered form field slide-up */
+@keyframes se-slide-up {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.se-slide-up {
+  animation: se-slide-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.se-slide-up-1 { animation-delay: 0.05s; }
+.se-slide-up-2 { animation-delay: 0.12s; }
+.se-slide-up-3 { animation-delay: 0.19s; }
+.se-slide-up-4 { animation-delay: 0.26s; }
+.se-slide-up-5 { animation-delay: 0.33s; }
+.se-slide-up-6 { animation-delay: 0.40s; }
+
+/* Fade-in view transition */
+@keyframes se-fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.se-fade-in {
+  animation: se-fade-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* Pulse dot */
+@keyframes se-pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.3; }
+}
+.se-pulse-dot { animation: se-pulse-dot 2s ease-in-out infinite; }
+
+/* Status ping */
+@keyframes se-ping {
+  75%, 100% { transform: scale(2); opacity: 0; }
+}
+.se-status-ping { animation: se-ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite; }
+
+/* ── Sidebar nav item ── */
+.se-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  font-weight: 500;
+  font-size: 0.875rem;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+  color: #94A3B8;
+  cursor: pointer;
+  background: transparent;
+}
+.se-nav-item:hover {
+  background: rgba(255,255,255,0.06);
+  color: #CBD5E1;
+}
+.se-nav-item.active {
+  background: rgba(14,165,233,0.12);
+  color: #fff;
+  border-color: rgba(14,165,233,0.25);
+}
+.se-nav-item.active .se-nav-icon {
+  color: var(--se-accent);
+}
+
+/* ── Primary button ── */
+.se-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  color: #fff;
+  background: linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%);
+  box-shadow: 0 0 0 0 var(--se-accent-glow);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.se-btn-primary:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px var(--se-accent-glow);
+}
+.se-btn-primary:active { transform: translateY(0); }
+
+/* ── Ghost / outline button ── */
+.se-btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.75rem;
+  font-weight: 600;
+  font-size: 0.875rem;
+  background: transparent;
+  border: 1px solid var(--se-border);
+  color: var(--se-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.se-btn-ghost:hover {
+  border-color: var(--se-accent);
+  color: var(--se-accent);
+  background: var(--se-accent-dim);
+}
+
+/* ── Input focus ring ── */
+.se-input {
+  width: 100%;
+  padding: 0.7rem 0.875rem;
+  background: #F8FAFC;
+  border: 1px solid var(--se-border);
+  border-radius: 0.75rem;
+  font-size: 0.875rem;
+  color: var(--se-text-primary);
+  transition: all 0.2s ease;
+  outline: none;
+}
+.se-input:focus {
+  border-color: var(--se-accent);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--se-accent-dim);
+}
+
+/* ── Surface card ── */
+.se-card {
+  background: var(--se-surface);
+  border: 1px solid var(--se-border);
+  border-radius: 1rem;
+}
+
+/* ── Status badges ── */
+.se-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 9999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.se-badge-accent   { background: var(--se-accent-dim);   color: var(--se-accent); }
+.se-badge-amber    { background: var(--se-amber-dim);    color: #B45309; }
+.se-badge-success  { background: var(--se-success-dim);  color: #065F46; }
+.se-badge-error    { background: var(--se-error-dim);    color: var(--se-error); }
+.se-badge-muted    { background: #F1F5F9;                color: var(--se-text-secondary); }
+
+/* ── Table utility ── */
+.se-table thead tr {
+  background: #F8FAFC;
+}
+.se-table thead th {
+  padding: 0.75rem 1rem;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--se-text-secondary);
+  border-bottom: 1px solid var(--se-border);
+}
+.se-table tbody tr {
+  border-bottom: 1px solid #F1F5F9;
+  transition: background 0.15s;
+}
+.se-table tbody tr:hover {
+  background: #F8FAFC;
+}
+.se-table tbody td {
+  padding: 0.75rem 1rem;
+  font-size: 0.875rem;
+  color: var(--se-text-primary);
+}
+
+/* ── Section header bar ── */
+.se-section-header {
+  background: #F8FAFC;
+  border-bottom: 1px solid var(--se-border);
+  padding: 1.25rem 1.5rem;
+}
+
+/* ── Sidebar user card ── */
+.se-user-card {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.08);
+}
+
+/* ── Scrollbar thin ── */
+.se-scroll::-webkit-scrollbar { width: 4px; height: 4px; }
+.se-scroll::-webkit-scrollbar-track { background: transparent; }
+.se-scroll::-webkit-scrollbar-thumb {
+  background: var(--se-border);
+  border-radius: 999px;
+}
