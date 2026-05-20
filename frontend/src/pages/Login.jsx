@@ -1,45 +1,257 @@
-import React, { useState } from 'react';
-import { User, Lock, Eye, EyeOff, ShieldCheck, Fingerprint, ArrowRight, AlertCircle, Camera, QrCode, BarChart3, Bell } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { User, Lock, Eye, EyeOff, ArrowRight, AlertCircle, ShieldCheck, Wifi } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
 
-export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
-  const [showPassword, setShowPassword] = useState(false);
-  const [cedula, setCedula] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
-  // Soporte para múltiples conjuntos si el backend devuelve 300
-  const [conjuntos, setConjuntos] = useState([]);
-  const [selectedConjuntoId, setSelectedConjuntoId] = useState('');
+/* ─────────────────────────────────────────────
+   Keyframe + font injection (CSS-only, no libs)
+───────────────────────────────────────────── */
+const GLOBAL_STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap');
 
-  const handleSupportLogin = async (e) => {
+  :root {
+    --se-bg: #F7F8FA;
+    --se-surface: #FFFFFF;
+    --se-border: #E2E6ED;
+    --se-border-focus: #0EA5E9;
+    --se-text-primary: #0F1923;
+    --se-text-secondary: #64748B;
+    --se-text-muted: #94A3B8;
+    --se-accent: #0EA5E9;
+    --se-accent-dim: rgba(14, 165, 233, 0.12);
+    --se-accent-glow: rgba(14, 165, 233, 0.35);
+    --se-amber: #F59E0B;
+    --se-amber-dim: rgba(245, 158, 11, 0.10);
+    --se-error: #EF4444;
+    --se-error-dim: rgba(239, 68, 68, 0.08);
+    --se-panel-bg: #080D14;
+    --se-panel-mid: #0D1520;
+    --se-panel-border: rgba(14, 165, 233, 0.12);
+  }
+
+  .se-root * {
+    font-family: 'DM Sans', sans-serif;
+    box-sizing: border-box;
+  }
+
+  .se-heading {
+    font-family: 'Syne', sans-serif;
+  }
+
+  /* Radar pulse behind logo */
+  @keyframes se-radar-ring {
+    0%   { transform: scale(0.55); opacity: 0.55; }
+    100% { transform: scale(2.2);  opacity: 0; }
+  }
+  .se-radar-ring {
+    animation: se-radar-ring 3.2s ease-out infinite;
+  }
+  .se-radar-ring:nth-child(2) { animation-delay: 1.05s; }
+  .se-radar-ring:nth-child(3) { animation-delay: 2.1s;  }
+
+  /* Slow rotating arc */
+  @keyframes se-arc-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .se-arc-spin {
+    animation: se-arc-spin 18s linear infinite;
+  }
+  .se-arc-spin-rev {
+    animation: se-arc-spin 26s linear infinite reverse;
+  }
+
+  /* Scan line sweep on right panel */
+  @keyframes se-scanline {
+    0%   { top: -6%;   opacity: 0; }
+    8%   { opacity: 0.6; }
+    92%  { opacity: 0.6; }
+    100% { top: 106%;  opacity: 0; }
+  }
+  .se-scanline {
+    animation: se-scanline 7s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+
+  /* Staggered form field slide-up */
+  @keyframes se-slide-up {
+    from { opacity: 0; transform: translateY(18px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .se-slide-up {
+    animation: se-slide-up 0.55s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+  .se-delay-1 { animation-delay: 0.05s; }
+  .se-delay-2 { animation-delay: 0.12s; }
+  .se-delay-3 { animation-delay: 0.19s; }
+  .se-delay-4 { animation-delay: 0.26s; }
+  .se-delay-5 { animation-delay: 0.33s; }
+  .se-delay-6 { animation-delay: 0.40s; }
+  .se-delay-7 { animation-delay: 0.47s; }
+
+  /* Input focus ring expansion */
+  .se-input-wrap {
+    position: relative;
+  }
+  .se-input-wrap::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: 10px;
+    border: 1.5px solid var(--se-border-focus);
+    opacity: 0;
+    transform: scale(1.01);
+    transition: opacity 0.18s ease, transform 0.18s ease;
+    pointer-events: none;
+  }
+  .se-input-wrap:focus-within::after {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /* Submit button glow on hover */
+  .se-submit-btn {
+    position: relative;
+    overflow: hidden;
+    transition: transform 0.15s ease, box-shadow 0.2s ease;
+  }
+  .se-submit-btn::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(255,255,255,0.14) 0%, transparent 60%);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+  }
+  .se-submit-btn:not(:disabled):hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 28px var(--se-accent-glow), 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .se-submit-btn:not(:disabled):hover::before { opacity: 1; }
+  .se-submit-btn:not(:disabled):active        { transform: translateY(0px); }
+
+  /* Visitor button */
+  .se-visitor-btn {
+    transition: background 0.18s ease, transform 0.15s ease, border-color 0.18s ease;
+  }
+  .se-visitor-btn:hover {
+    transform: translateY(-1px);
+    border-color: var(--se-amber);
+    background: var(--se-amber-dim);
+  }
+  .se-visitor-btn:active { transform: translateY(0px); }
+
+  /* Status dot blink */
+  @keyframes se-blink {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.25; }
+  }
+  .se-blink { animation: se-blink 2.2s ease-in-out infinite; }
+
+  /* Tilt grid lines on right panel */
+  .se-grid-overlay {
+    background-image:
+      linear-gradient(rgba(14,165,233,0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(14,165,233,0.045) 1px, transparent 1px);
+    background-size: 52px 52px;
+  }
+
+  /* Corner bracket decoration */
+  .se-corner-tl, .se-corner-br {
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    pointer-events: none;
+  }
+  .se-corner-tl {
+    top: 14px; left: 14px;
+    border-top: 1.5px solid var(--se-accent);
+    border-left: 1.5px solid var(--se-accent);
+    opacity: 0.55;
+  }
+  .se-corner-br {
+    bottom: 14px; right: 14px;
+    border-bottom: 1.5px solid var(--se-accent);
+    border-right: 1.5px solid var(--se-accent);
+    opacity: 0.55;
+  }
+
+  /* Error shake */
+  @keyframes se-shake {
+    0%, 100% { transform: translateX(0); }
+    20%       { transform: translateX(-5px); }
+    40%       { transform: translateX(5px); }
+    60%       { transform: translateX(-4px); }
+    80%       { transform: translateX(4px); }
+  }
+  .se-shake { animation: se-shake 0.38s cubic-bezier(0.36, 0.07, 0.19, 0.97); }
+`;
+
+/* ─────────────────────────────────────────────
+   Architectural data for right panel stats
+───────────────────────────────────────────── */
+const PANEL_STATS = [
+  { value: '99.8%', label: 'Uptime SLA' },
+  { value: 'AES-256', label: 'Cifrado en tránsito' },
+  { value: '<50ms', label: 'Latencia media' },
+];
+
+/* ─────────────────────────────────────────────
+   Component
+───────────────────────────────────────────── */
+export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
+  const [showPassword, setShowPassword]       = useState(false);
+  const [cedula, setCedula]                   = useState('');
+  const [password, setPassword]               = useState('');
+  const [error, setError]                     = useState(null);
+  const [loading, setLoading]                 = useState(false);
+  const [conjuntos, setConjuntos]             = useState([]);
+  const [selectedConjuntoId, setSelectedConjuntoId] = useState('');
+  const [shakeError, setShakeError]           = useState(false);
+  const [currentTime, setCurrentTime]         = useState('');
+
+  // Live clock for the right panel status bar
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(
+        now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false })
+      );
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const triggerShake = () => {
+    setShakeError(true);
+    setTimeout(() => setShakeError(false), 400);
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
     if (!cedula || !password) {
-      setError('Por favor ingresa cédula y contraseña.');
+      setError('Ingresa tu cédula y contraseña para continuar.');
+      triggerShake();
       return;
     }
-    
+
     setLoading(true);
     setError(null);
     try {
       const payload = { cedula, password };
-      if (selectedConjuntoId) {
-        payload.conjuntoId = selectedConjuntoId;
-      }
-      
+      if (selectedConjuntoId) payload.conjuntoId = selectedConjuntoId;
+
       const response = await api.post('/usuarios/login', payload);
-      
-      // Si el backend pide selección de conjunto (status 300 manejado como valid response por axios si configuramos algo, pero 300 lanza error por defecto. Mejor atraparlo en catch).
-      
       onLoginSuccess(response.data.data || response.data);
     } catch (err) {
-      console.log(err.response);
-      if (err.response && err.response.status === 300) {
+      if (err.response?.status === 300) {
         setConjuntos(err.response.data.conjuntos);
-        setError('Por favor selecciona tu conjunto.');
+        setError('Se encontraron varios conjuntos. Selecciona el tuyo.');
       } else {
-        setError(err.response?.data?.error || 'Error al iniciar sesión. Verifica tus credenciales.');
+        setError(
+          err.response?.data?.error || 'Credenciales incorrectas. Verifica e intenta de nuevo.'
+        );
+        triggerShake();
       }
     } finally {
       setLoading(false);
@@ -47,173 +259,554 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      {/* Elementos decorativos */}
-      <div className="absolute top-0 left-0 w-full h-96 bg-blue-600 rounded-b-[100px] shadow-2xl skew-y-2 -translate-y-10 z-0"></div>
+    <>
+      {/* Inject global styles once */}
+      <style>{GLOBAL_STYLES}</style>
 
-      <div className="bg-white max-w-5xl w-full rounded-3xl shadow-2xl relative z-10 flex overflow-hidden border border-slate-100">
-        
-        {/* Lado Izquierdo: Formulario */}
-        <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-center">
-          <div className="mb-10 text-center lg:text-left">
-            <div className="flex justify-center lg:justify-start mb-6">
-              <Logo variant="default" theme="light" subtitle="Control inteligente y acceso seguro" />
-            </div>
-            <h1 className="text-3xl font-bold text-slate-900 mb-2">Bienvenido de nuevo</h1>
-            <p className="text-slate-500 text-sm">Ingresa tus credenciales para acceder a tu ecosistema residencial</p>
-          </div>
-
-          <form className="space-y-6" onSubmit={handleSupportLogin}>
-            
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg flex items-start gap-3">
-                <AlertCircle className="text-red-500 shrink-0 mt-0.5" size={18} />
-                <p className="text-red-700 text-sm font-medium">{error}</p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-sm font-semibold text-slate-700 mb-2">Cédula de Identidad</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <User size={18} className="text-slate-400" />
-                </div>
-                <input
-                  type="text"
-                  value={cedula}
-                  onChange={(e) => setCedula(e.target.value)}
-                  className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-slate-700"                                            
-                  placeholder="Ej: 1010101010"
-                />
-              </div>
+      <div
+        className="se-root h-screen flex flex-col lg:flex-row overflow-hidden"
+        style={{ background: 'var(--se-surface)' }}
+      >
+          {/* ════════════════════════════════════
+              LEFT — Form panel
+          ════════════════════════════════════ */}
+          <div
+            className="w-full lg:w-[46%] flex flex-col justify-between p-8 sm:p-10 lg:p-12 relative overflow-y-auto"
+            style={{ background: 'var(--se-surface)' }}
+          >
+            {/* Top logo */}
+            <div className="se-slide-up se-delay-1 mb-8">
+              <Logo variant="default" theme="light" subtitle="Sistema de Control de Acceso" />
             </div>
 
-            <div>
-               <div className="flex justify-between items-center mb-2">
-                 <label className="block text-sm font-semibold text-slate-700">Contraseña</label>
-                 <a href="#" className="font-semibold text-xs text-blue-600 hover:text-blue-800 transition">¿Olvidaste tu contraseña?</a>
-               </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                  <Lock size={18} className="text-slate-400" />
-                </div>
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full pl-11 pr-12 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all text-slate-700"                                           
-                  placeholder="••••••••••••"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-4 flex items-center text-slate-400 hover:text-blue-600 transition"
+            {/* Form content */}
+            <div className="flex-1 flex flex-col justify-center">
+              {/* Heading */}
+              <div className="mb-8 se-slide-up se-delay-2">
+                <h1
+                  className="se-heading text-[1.85rem] font-bold leading-tight mb-1.5"
+                  style={{ color: 'var(--se-text-primary)', letterSpacing: '-0.02em' }}
                 >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}     
-                </button>
+                  Bienvenido de nuevo
+                </h1>
+                <p style={{ color: 'var(--se-text-secondary)', fontSize: '0.875rem', fontWeight: 300 }}>
+                  Accede a tu ecosistema residencial de forma segura.
+                </p>
               </div>
+
+              <form onSubmit={handleSubmit} noValidate className="space-y-4">
+
+                {/* Error banner */}
+                {error && (
+                  <div
+                    className={`flex items-start gap-3 p-3.5 rounded-xl ${shakeError ? 'se-shake' : ''}`}
+                    style={{
+                      background: 'var(--se-error-dim)',
+                      border: '1px solid rgba(239,68,68,0.18)',
+                    }}
+                    role="alert"
+                    aria-live="assertive"
+                  >
+                    <AlertCircle size={16} style={{ color: 'var(--se-error)', flexShrink: 0, marginTop: '1px' }} aria-hidden="true" />
+                    <p style={{ color: 'var(--se-error)', fontSize: '0.8125rem', fontWeight: 500, lineHeight: 1.45 }}>
+                      {error}
+                    </p>
+                  </div>
+                )}
+
+                {/* Cedula field */}
+                <div className="se-slide-up se-delay-3">
+                  <label
+                    htmlFor="se-cedula"
+                    style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--se-text-secondary)', marginBottom: '7px' }}
+                  >
+                    Cédula de identidad
+                  </label>
+                  <div className="se-input-wrap">
+                    <div
+                      style={{
+                        position: 'absolute', top: 0, left: 0, bottom: 0,
+                        paddingLeft: '14px', display: 'flex', alignItems: 'center', pointerEvents: 'none',
+                        zIndex: 1,
+                      }}
+                    >
+                      <User size={15} style={{ color: 'var(--se-text-muted)' }} aria-hidden="true" />
+                    </div>
+                    <input
+                      id="se-cedula"
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="username"
+                      value={cedula}
+                      onChange={(e) => setCedula(e.target.value)}
+                      placeholder="Ej: 1010101010"
+                      required
+                      style={{
+                        width: '100%',
+                        paddingLeft: '40px',
+                        paddingRight: '14px',
+                        paddingTop: '11px',
+                        paddingBottom: '11px',
+                        background: 'var(--se-bg)',
+                        border: '1.5px solid var(--se-border)',
+                        borderRadius: '10px',
+                        fontSize: '0.875rem',
+                        color: 'var(--se-text-primary)',
+                        outline: 'none',
+                        transition: 'border-color 0.15s ease, background 0.15s ease',
+                        display: 'block',
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = 'transparent';
+                        e.target.style.background = '#fff';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = 'var(--se-border)';
+                        e.target.style.background = 'var(--se-bg)';
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* Password field */}
+                <div className="se-slide-up se-delay-4">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: '7px' }}>
+                    <label
+                      htmlFor="se-password"
+                      style={{ fontSize: '0.75rem', fontWeight: 600, letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--se-text-secondary)' }}
+                    >
+                      Contraseña
+                    </label>
+                    <a
+                      href="#"
+                      style={{ fontSize: '0.75rem', color: 'var(--se-accent)', fontWeight: 500, textDecoration: 'none' }}
+                      onMouseEnter={(e) => (e.target.style.textDecoration = 'underline')}
+                      onMouseLeave={(e) => (e.target.style.textDecoration = 'none')}
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </a>
+                  </div>
+                  <div className="se-input-wrap">
+                    <div
+                      style={{
+                        position: 'absolute', top: 0, left: 0, bottom: 0,
+                        paddingLeft: '14px', display: 'flex', alignItems: 'center', pointerEvents: 'none',
+                        zIndex: 1,
+                      }}
+                    >
+                      <Lock size={15} style={{ color: 'var(--se-text-muted)' }} aria-hidden="true" />
+                    </div>
+                    <input
+                      id="se-password"
+                      type={showPassword ? 'text' : 'password'}
+                      autoComplete="current-password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••••"
+                      required
+                      style={{
+                        width: '100%',
+                        paddingLeft: '40px',
+                        paddingRight: '44px',
+                        paddingTop: '11px',
+                        paddingBottom: '11px',
+                        background: 'var(--se-bg)',
+                        border: '1.5px solid var(--se-border)',
+                        borderRadius: '10px',
+                        fontSize: '0.875rem',
+                        color: 'var(--se-text-primary)',
+                        outline: 'none',
+                        transition: 'border-color 0.15s ease, background 0.15s ease',
+                        display: 'block',
+                      }}
+                      onFocus={(e) => {
+                        e.target.style.borderColor = 'transparent';
+                        e.target.style.background = '#fff';
+                      }}
+                      onBlur={(e) => {
+                        e.target.style.borderColor = 'var(--se-border)';
+                        e.target.style.background = 'var(--se-bg)';
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Ocultar contraseña' : 'Mostrar contraseña'}
+                      style={{
+                        position: 'absolute', top: 0, right: 0, bottom: 0,
+                        paddingRight: '13px', display: 'flex', alignItems: 'center',
+                        color: 'var(--se-text-muted)', background: 'none', border: 'none',
+                        cursor: 'pointer', zIndex: 2, transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--se-accent)')}
+                      onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--se-text-muted)')}
+                    >
+                      {showPassword
+                        ? <EyeOff size={15} aria-hidden="true" />
+                        : <Eye size={15} aria-hidden="true" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Conjunto selector — appears when backend returns 300 */}
+                {conjuntos.length > 0 && (
+                  <div
+                    className="se-slide-up se-delay-1"
+                    style={{
+                      padding: '14px',
+                      background: 'var(--se-accent-dim)',
+                      border: '1.5px solid rgba(14,165,233,0.22)',
+                      borderRadius: '12px',
+                    }}
+                    role="group"
+                    aria-labelledby="conjunto-label"
+                  >
+                    <p
+                      id="conjunto-label"
+                      style={{ fontSize: '0.72rem', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', color: 'var(--se-accent)', marginBottom: '8px' }}
+                    >
+                      Selecciona tu conjunto residencial
+                    </p>
+                    <select
+                      id="se-conjunto"
+                      value={selectedConjuntoId}
+                      onChange={(e) => setSelectedConjuntoId(e.target.value)}
+                      aria-labelledby="conjunto-label"
+                      style={{
+                        width: '100%',
+                        padding: '10px 12px',
+                        background: '#fff',
+                        border: '1.5px solid var(--se-border)',
+                        borderRadius: '8px',
+                        fontSize: '0.875rem',
+                        color: 'var(--se-text-primary)',
+                        outline: 'none',
+                        cursor: 'pointer',
+                        appearance: 'auto',
+                      }}
+                    >
+                      <option value="">-- Seleccionar conjunto --</option>
+                      {conjuntos.map((c) => (
+                        <option key={c.conjuntoId} value={c.conjuntoId}>
+                          {c.conjuntoNombre}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {/* Submit */}
+                <div className="se-slide-up se-delay-5 pt-1">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="se-submit-btn"
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      padding: '13px 20px',
+                      background: loading
+                        ? 'var(--se-text-secondary)'
+                        : 'linear-gradient(135deg, #0EA5E9 0%, #0284C7 100%)',
+                      color: '#fff',
+                      fontFamily: "'Syne', sans-serif",
+                      fontSize: '0.875rem',
+                      fontWeight: 700,
+                      letterSpacing: '0.03em',
+                      border: 'none',
+                      borderRadius: '10px',
+                      cursor: loading ? 'not-allowed' : 'pointer',
+                      boxShadow: loading ? 'none' : '0 4px 18px var(--se-accent-glow)',
+                    }}
+                    aria-busy={loading}
+                  >
+                    {loading ? (
+                      <>
+                        <svg
+                          width="15" height="15" viewBox="0 0 24 24" fill="none"
+                          stroke="currentColor" strokeWidth="2.5"
+                          style={{ animation: 'se-arc-spin 0.75s linear infinite', flexShrink: 0 }}
+                          aria-hidden="true"
+                        >
+                          <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
+                        </svg>
+                        Verificando identidad…
+                      </>
+                    ) : (
+                      <>
+                        Iniciar Sesión
+                        <ArrowRight
+                          size={15}
+                          aria-hidden="true"
+                          style={{ transition: 'transform 0.2s ease' }}
+                          className="group-hover:translate-x-1"
+                        />
+                      </>
+                    )}
+                  </button>
+                </div>
+              </form>
             </div>
 
-            {conjuntos.length > 0 && (
-              <div className="mt-4 p-4 border border-blue-100 bg-blue-50/50 rounded-xl">
-                 <label className="block text-sm font-semibold text-slate-700 mb-2">Seleccione su Conjunto:</label>
-                 <select 
-                    className="w-full p-3 bg-white border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedConjuntoId}
-                    onChange={(e) => setSelectedConjuntoId(e.target.value)}
-                 >
-                    <option value="">-- Seleccionar --</option>
-                    {conjuntos.map(c => (
-                      <option key={c.conjuntoId} value={c.conjuntoId}>{c.conjuntoNombre}</option>
-                    ))}
-                 </select>
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-70 text-white font-bold rounded-xl shadow-lg shadow-blue-200 transition-all flex justify-center items-center gap-2 group mt-6"
+            {/* Visitor CTA at bottom */}
+            <div
+              className="se-slide-up se-delay-7 mt-8 pt-6"
+              style={{ borderTop: '1px solid var(--se-border)' }}
             >
-              {loading ? 'Verificando...' : 'Iniciar Sesión'}
-              {!loading && <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" /> }
-            </button>
-          </form>
-
-          {/* Separador + Botón Visitante */}
-          <div className="mt-6 pt-6 border-t border-slate-100">
-            <p className="text-center text-slate-400 text-xs mb-3">¿Eres un visitante con código de acceso?</p>
-            <button
-              type="button"
-              onClick={onVisitanteAcceso}
-              className="w-full py-3 border-2 border-emerald-200 text-emerald-700 font-bold rounded-xl hover:bg-emerald-50 transition-all flex justify-center items-center gap-2 group"
-            >
-              <ShieldCheck size={18} className="text-emerald-500" />
-              Entrar como Visitante
-              <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform text-emerald-400" />
-            </button>
-          </div>
-        </div>
-
-        {/* Lado Derecho: Branding + Features */}
-        <div className="hidden lg:flex w-1/2 flex-col p-12 relative overflow-hidden justify-center gap-10 bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900">
-            {/* Patrón de fondo decorativo */}
-            <div className="absolute inset-0 z-0 pointer-events-none">
-              <div className="absolute -top-20 -right-20 w-80 h-80 bg-blue-500 rounded-full blur-3xl opacity-20" />
-              <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-indigo-500 rounded-full blur-3xl opacity-20" />
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-blue-600 rounded-full blur-3xl opacity-10" />
-              {/* Grid sutil */}
-              <div
-                className="absolute inset-0 opacity-[0.03]"
+              <p
+                style={{ textAlign: 'center', fontSize: '0.75rem', color: 'var(--se-text-muted)', marginBottom: '10px', fontWeight: 400 }}
+              >
+                ¿Eres visitante con código de acceso?
+              </p>
+              <button
+                type="button"
+                onClick={onVisitanteAcceso}
+                className="se-visitor-btn"
                 style={{
-                  backgroundImage: 'linear-gradient(white 1px, transparent 1px), linear-gradient(90deg, white 1px, transparent 1px)',
-                  backgroundSize: '40px 40px'
+                  width: '100%',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  padding: '11px 20px',
+                  background: 'var(--se-amber-dim)',
+                  border: '1.5px solid rgba(245,158,11,0.30)',
+                  borderRadius: '10px',
+                  color: '#B45309',
+                  fontSize: '0.8125rem',
+                  fontWeight: 600,
+                  cursor: 'pointer',
                 }}
-              />
+                aria-label="Acceder como visitante con código QR"
+              >
+                <ShieldCheck size={15} style={{ color: 'var(--se-amber)', flexShrink: 0 }} aria-hidden="true" />
+                Ingresar como Visitante
+                <ArrowRight size={13} style={{ color: '#D97706', marginLeft: 'auto' }} aria-hidden="true" />
+              </button>
             </div>
+          </div>
 
-            {/* Logo + Hero text */}
-            <div className="relative z-10 space-y-7">
-               <div className="mb-2">
-                  <Logo variant="hero" theme="dark" subtitle="Control inteligente y acceso seguro" />
-               </div>
-               <h2 className="text-4xl font-bold text-white leading-tight">
-                 Seguridad <span className="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">Inteligente</span><br/>para tu Conjunto.
-               </h2>
-               <p className="text-slate-400 text-sm leading-relaxed max-w-md">
-                 Control de acceso vehicular con cámara de IA (YOLOv8), gestión de residentes, auditoría forense y accesos QR, todo acoplado en una misma plataforma.
-               </p>
+          {/* ════════════════════════════════════
+              RIGHT — Branding panel (lg+ only)
+          ════════════════════════════════════ */}
+          <div
+            className="hidden lg:flex flex-1 flex-col relative overflow-hidden"
+            style={{ background: 'var(--se-panel-bg)' }}
+            aria-hidden="true"
+          >
+            {/* Architectural grid */}
+            <div className="se-grid-overlay absolute inset-0" />
 
-               {/* Feature pills */}
-               <div className="grid grid-cols-2 gap-3 pt-2 max-w-md">
-                 {[
-                   { icon: Camera, label: 'Cámara IA · YOLOv8', color: 'from-blue-500 to-cyan-500' },
-                   { icon: QrCode, label: 'Accesos QR dinámicos', color: 'from-emerald-500 to-teal-500' },
-                   { icon: BarChart3, label: 'Dashboard Power BI', color: 'from-purple-500 to-fuchsia-500' },
-                   { icon: Bell, label: 'Alertas en tiempo real', color: 'from-orange-500 to-amber-500' }
-                 ].map((f, i) => (
-                   <div key={i} className="flex items-center gap-2.5 px-3.5 py-2.5 bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-xl hover:bg-white/[0.06] transition-all">
-                     <div className={`p-1.5 rounded-lg bg-gradient-to-br ${f.color} shadow-lg`}>
-                       <f.icon size={14} className="text-white" />
-                     </div>
-                     <span className="text-xs text-slate-200 font-medium">{f.label}</span>
-                   </div>
-                 ))}
-               </div>
-            </div>
+            {/* Scanline sweep */}
+            <div
+              className="se-scanline absolute inset-x-0 pointer-events-none z-10"
+              style={{
+                height: '2px',
+                background: 'linear-gradient(90deg, transparent 0%, rgba(14,165,233,0.5) 40%, rgba(14,165,233,0.8) 50%, rgba(14,165,233,0.5) 60%, transparent 100%)',
+                boxShadow: '0 0 16px 4px rgba(14,165,233,0.25)',
+              }}
+            />
 
-            {/* Footer */}
-            <div className="relative z-10 pt-6 mt-2 border-t border-white/5 flex items-center justify-between text-[11px] text-slate-500">
-              <span className="font-medium">© {new Date().getFullYear()} SafeEntry</span>
-              <div className="flex items-center gap-4">
-                <a href="#" className="hover:text-slate-300 transition">Soporte</a>
-                <a href="#" className="hover:text-slate-300 transition">Términos</a>
-                <a href="#" className="hover:text-slate-300 transition">Privacidad</a>
+            {/* Ambient glow blobs */}
+            <div
+              style={{
+                position: 'absolute', top: '-10%', right: '-10%',
+                width: '480px', height: '480px',
+                background: 'radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 65%)',
+                pointerEvents: 'none',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute', bottom: '-8%', left: '-8%',
+                width: '380px', height: '380px',
+                background: 'radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 65%)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            {/* Corner brackets */}
+            <div className="se-corner-tl" />
+            <div className="se-corner-br" />
+
+            {/* ── Content ── */}
+            <div className="relative z-10 flex flex-col h-full p-11">
+
+              {/* Top status bar */}
+              <div
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  marginBottom: '48px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span
+                    className="se-blink"
+                    style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block', flexShrink: 0 }}
+                  />
+                  <span style={{ fontSize: '0.7rem', color: '#94A3B8', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+                    Sistema en línea
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                  <Wifi size={11} style={{ color: '#64748B' }} />
+                  <span style={{ fontFamily: "'DM Sans', monospace", fontSize: '0.72rem', color: '#94A3B8', letterSpacing: '0.05em' }}>
+                    {currentTime}
+                  </span>
+                </div>
+              </div>
+
+              {/* Radar / logo hero section */}
+              <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '44px', height: '200px' }}>
+
+                {/* Radar pulse rings */}
+                {[0, 1, 2].map((i) => (
+                  <div
+                    key={i}
+                    className="se-radar-ring"
+                    style={{
+                      position: 'absolute',
+                      width: '160px', height: '160px',
+                      borderRadius: '50%',
+                      border: '1.5px solid rgba(14,165,233,0.45)',
+                      animationDelay: `${i * 1.05}s`,
+                    }}
+                  />
+                ))}
+
+                {/* Outer rotating dashed arc */}
+                <div
+                  className="se-arc-spin"
+                  style={{
+                    position: 'absolute',
+                    width: '190px', height: '190px',
+                    borderRadius: '50%',
+                    border: '1px dashed rgba(14,165,233,0.18)',
+                  }}
+                />
+                {/* Inner counter-rotating arc */}
+                <div
+                  className="se-arc-spin-rev"
+                  style={{
+                    position: 'absolute',
+                    width: '130px', height: '130px',
+                    borderRadius: '50%',
+                    border: '1px dashed rgba(99,102,241,0.20)',
+                  }}
+                />
+
+                {/* Logo centered */}
+                <div style={{ position: 'relative', zIndex: 2 }}>
+                  <Logo variant="hero" theme="dark" subtitle={null} />
+                </div>
+              </div>
+
+              {/* Headline */}
+              <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+                <h2
+                  className="se-heading"
+                  style={{
+                    fontSize: '2rem', fontWeight: 800,
+                    color: '#fff', letterSpacing: '-0.025em',
+                    lineHeight: 1.2, marginBottom: '12px',
+                  }}
+                >
+                  Seguridad inteligente<br />
+                  <span
+                    style={{
+                      background: 'linear-gradient(90deg, #0EA5E9, #818CF8)',
+                      WebkitBackgroundClip: 'text',
+                      WebkitTextFillColor: 'transparent',
+                      backgroundClip: 'text',
+                    }}
+                  >
+                    para tu conjunto.
+                  </span>
+                </h2>
+                <p
+                  style={{
+                    fontSize: '0.8125rem', color: '#94A3B8',
+                    lineHeight: 1.65, maxWidth: '320px',
+                    margin: '0 auto', fontWeight: 300,
+                  }}
+                >
+                  Control de acceso vehicular con IA, gestión de residentes, auditoría forense y accesos QR dinámicos en una sola plataforma.
+                </p>
+              </div>
+
+              {/* Stats row */}
+              <div
+                style={{
+                  display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
+                  gap: '10px', marginBottom: '32px',
+                }}
+              >
+                {PANEL_STATS.map((s) => (
+                  <div
+                    key={s.label}
+                    style={{
+                      textAlign: 'center',
+                      padding: '14px 8px',
+                      background: 'rgba(255,255,255,0.025)',
+                      border: '1px solid rgba(14,165,233,0.09)',
+                      borderRadius: '10px',
+                      backdropFilter: 'blur(4px)',
+                    }}
+                  >
+                    <p
+                      className="se-heading"
+                      style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0EA5E9', letterSpacing: '-0.02em', marginBottom: '3px' }}
+                    >
+                      {s.value}
+                    </p>
+                    <p style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
+                      {s.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Spacer */}
+              <div style={{ flex: 1 }} />
+
+              {/* Footer */}
+              <div
+                style={{
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                  paddingTop: '18px',
+                  borderTop: '1px solid rgba(255,255,255,0.04)',
+                }}
+              >
+                <span
+                  className="se-heading"
+                  style={{ fontSize: '0.7rem', color: '#64748B', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}
+                >
+                  © {new Date().getFullYear()} SafeEntry
+                </span>
+                <div style={{ display: 'flex', gap: '18px' }}>
+                  {['Soporte', 'Términos', 'Privacidad'].map((l) => (
+                    <a
+                      key={l}
+                      href="#"
+                      style={{
+                        fontSize: '0.7rem', color: '#64748B', fontWeight: 400,
+                        textDecoration: 'none', transition: 'color 0.15s',
+                      }}
+                      onMouseEnter={(e) => (e.target.style.color = '#CBD5E1')}
+                      onMouseLeave={(e) => (e.target.style.color = '#64748B')}
+                    >
+                      {l}
+                    </a>
+                  ))}
+                </div>
               </div>
             </div>
-        </div>
+          </div>
 
       </div>
-    </div>
+    </>
   );
 }
