@@ -1,116 +1,140 @@
-# Admin Residencial
+# SafeEntry — Sistema de Administración Residencial
 
-Sistema integral de administración residencial con arquitectura moderna, control de acceso vehicular (LPR - Reconocimiento de Placas), escáner de QR, soporte Multitenant y modelos predictivos.
+Sistema integral de gestión residencial con control de acceso vehicular (LPR), escáner QR, arquitectura **multitenant** y asistente de IA.
 
-## Características y Tecnologías
+> **Demo en producción:** [safe-entry-neon.vercel.app](https://safe-entry-neon.vercel.app) · Backend: [safeentry-backend.onrender.com](https://safeentry-backend.onrender.com)
 
-### Backend (Node.js)
-- **Express.js** - API REST para administración y control
-- **Mongoose / MongoDB** - Base de datos NoSQL con arquitectura *Multitenant*
-- **Autenticación JWT** - Control de roles (Superadmin, Admin, Residente, Portero)
-- **Seguridad** - Helmet, rate limiters, validación de datos, audit logs
-- **Logging** - Winston para registro de eventos
-- **Telemetría** - Sistema de monitoreo on-premise desde Azure
+---
 
-### Frontend (React + Vite)
-- **React 19** - UI moderna con componentes funcionales
-- **Vite** - Build tool rápido con HMR
-- **Tailwind CSS 4** - Estilos utilitarios
-- **Lucide React** - Iconografía
-- **QR Code** - Generación de códigos QR para acceso
+## Stack Tecnológico
 
-### Frontend PWA (HTML/CSS/JS)
-- Service Worker para funcionamiento offline
-- Manifest.json para instalación como app
-- Interfaces para todos los roles de usuario
-
-### Visión por Computadora (Python)
-- **Reconocimiento de Placas (LPR)** - YOLOv8 + OpenCV
-- **Escáner QR** - Validación rápida de acceso con cámara
-- **Modelo Predictivo** - Weka + procesamiento de datos
-
-### Despliegue
-- **Docker** - Contenedores para todos los servicios
-- **Docker Compose** - Orquestación local y producción
-- **CI/CD** - GitHub Actions para despliegue automatizado
+| Capa | Tecnología |
+|------|-----------|
+| Backend | Node.js 18+ · Express · MongoDB + Mongoose |
+| Frontend | React 19 · Vite · Tailwind CSS 4 |
+| Auth | JWT (access + refresh token) · bcryptjs |
+| Visión | Python · YOLOv8 · OpenCV (LPR) |
+| IA | Groq API (chatbot contextual) |
+| Despliegue | Docker · Render (backend) · Vercel (frontend) |
 
 ---
 
 ## Requisitos Previos
 
-| Componente | Versión |
-|-------------|---------|
+| Herramienta | Versión mínima |
+|-------------|---------------|
 | Node.js | 18+ |
 | MongoDB | 5+ (local o Atlas) |
-| Python | 3.9+ |
+| Python | 3.9+ (solo para LPR/QR scanner) |
 | Docker | 20+ (opcional) |
 
 ---
 
 ## Instalación Rápida
 
-### Desarrollo Local
+### Desarrollo local
 
 ```bash
-# Clonar repositorio
+# 1. Clonar repositorio
 git clone <repo-url>
 cd admin_residencial
 
-# Instalar dependencias backend
+# 2. Instalar dependencias backend
 npm install
 
-# Instalar dependencias frontend
+# 3. Instalar dependencias frontend
 cd frontend && npm install && cd ..
 
-# Configurar variables de entorno
-cp .env.example .env
-# Editar .env con tus configuraciones
+# 4. Configurar variables de entorno
+cp .env.example .env          # Editar con tus valores
+cp frontend/.env.example frontend/.env
 
-# Iniciar servidor
+# 5. Iniciar backend (puerto 5000)
 npm run dev
+
+# 6. Iniciar frontend en otra terminal (puerto 5173)
+cd frontend && npm run dev
 ```
 
-### Con Docker
+### Con Docker (stack completo)
 
 ```bash
-# Desarrollo (build local)
-docker-compose -f docker-compose-local.yml up -d
+# Demo local — backend + frontend + MongoDB
+docker compose --env-file .env.docker -f docker-compose.demo.yml up -d --build
 
-# Producción
-docker-compose up -d --build
+# Solo backend + MongoDB (apunta al frontend de Vercel)
+docker compose -f docker-compose.yml up -d
 
-# Detener servicios
-docker-compose down
+# Detener y borrar volúmenes
+docker compose -f docker-compose.demo.yml down -v
 ```
+
+> ⚠️ Si el puerto 80 está ocupado (XAMPP), el frontend se mapea a `8080:80` en `docker-compose.demo.yml`.
+
+---
+
+## Variables de Entorno
+
+### Backend (`.env`)
+
+```env
+PORT=5000
+NODE_ENV=development
+MONGO_URI=mongodb://localhost:27017/adminResidencial
+JWT_SECRET=<mínimo 32 chars — generar con: npm run generate-secret>
+FRONTEND_URL_LOCAL=http://localhost:5173
+FRONTEND_URL_PROD=https://safe-entry-neon.vercel.app
+ADMIN_CEDULA=99999999
+ADMIN_PASSWORD=<contraseña superadmin inicial>
+GROQ_API_KEY=<opcional — habilita el chatbot IA>
+```
+
+### Frontend (`frontend/.env`)
+
+```env
+VITE_API_URL=http://localhost:5000/api
+VITE_POWERBI_EMBED_URL=https://app.powerbi.com/view?r=...   # opcional
+```
+
+> ⚠️ Las variables `VITE_*` se incrustan en el build. Después de cambiarlas en Vercel **redeploy manual obligatorio**.
 
 ---
 
 ## Scripts Disponibles
 
-### Backend (raíz)
+### Backend
 ```bash
-npm run dev              # Desarrollo (NODE_ENV=development)
-npm run prod             # Producción (NODE_ENV=production)
-npm start                # Iniciar estándar
-npm run generate-secret  # Generar JWT_SECRET seguro
+npm run dev              # Modo desarrollo (NODE_ENV=development)
+npm run prod             # Modo producción
+npm start                # Inicio estándar
+npm run generate-secret  # Genera JWT_SECRET de 64 bytes hex
 ```
 
 ### Frontend
 ```bash
 cd frontend
-npm run dev     # Servidor desarrollo (puerto 5173)
-npm run build   # Build producción
-npm run preview # Preview del build
+npm run dev      # Servidor desarrollo → http://localhost:5173
+npm run build    # Build producción → frontend/dist/
+npm run lint     # ESLint
 ```
 
-### Scripts de Utilidad (Windows)
-| Archivo | Función |
-|---------|---------|
-| `scripts/instalar.bat` | Instalar dependencias |
-| `scripts/iniciar.bat` | Iniciar servicios |
-| `scripts/detener.bat` | Detener servicios |
-| `scripts/backup.bat` | Crear respaldos |
-| `scripts/publicar-imagenes.bat` | Gestión de imágenes |
+### Scripts de mantenimiento
+```bash
+node scripts/fix-plazas-atascadas.js   # Libera plazas bloqueadas
+node scripts/seed-database.js          # Datos de prueba
+node scripts/migrate-multitenant.js    # Migración a multi-tenant
+```
+
+### Servicios Python (corren fuera de Docker en Windows)
+```bash
+# Reconocimiento de placas — puerto 5001
+cd Reconocimiento && pip install -r requirements.txt
+python Placascolombianas.py
+
+# Escáner QR
+cd qr-scanner && pip install -r requirements.txt
+python test_qr_opencv.py
+```
 
 ---
 
@@ -118,278 +142,137 @@ npm run preview # Preview del build
 
 ```
 admin_residencial/
-├── config/                      # Configuración de la aplicación
-│   ├── app.config.js           # Configuración general
-│   ├── cache.js                # Sistema de caché
-│   ├── database.js             # Conexión MongoDB
-│   └── logger.js               # Sistema de logging (Winston)
 │
-├── controllers/                 # Lógica de negocio (API)
-│   ├── conjuntoController.js   # Gestión de conjuntos
-│   ├── parqueaderoController.js # Gestión de parqueaderos
-│   ├── usuariocontroller.js    # Gestión de usuarios
-│   └── visitanteController.js  # Gestión de visitantes
+├── src/                            # Backend — arquitectura modular
+│   ├── modules/
+│   │   ├── usuarios/               # CRUD + login + impersonación
+│   │   ├── visitantes/             # Visitantes + códigos QR
+│   │   ├── parqueaderos/           # Plazas + asignación
+│   │   ├── conjuntos/              # Tenants (multitenant)
+│   │   ├── modelo/                 # Programación Lineal (I/O académico)
+│   │   ├── telemetria/             # Monitoreo + scripts Python
+│   │   └── chatbot/                # Asistente Groq IA
+│   ├── shared/
+│   │   ├── config/                 # database, logger, cache
+│   │   ├── middlewares/            # auth, audit, rate-limit, planLimits
+│   │   └── models/                 # HistorialAcceso, AuditLog
+│   └── index.js                    # Barrel: exporta { config, logger, middlewares, models }
 │
-├── models/                       # Modelos Mongoose (MongoDB)
-│   ├── auditLog.js             # Log de auditoría
-│   ├── conjunto.js             # Conjuntos residenciales (multi-tenant)
-│   ├── historialAcceso.js      # Historial de accesos
-│   ├── Instalacion.js          # Instalaciones (telemetría)
-│   ├── parqueadero.js          # Parqueaderos
-│   ├── usuario.js              # Usuarios
-│   └── visitante.js            # Visitantes
-│
-├── middlewares/                  # Middlewares Express
-│   ├── audit.middleware.js     # Auditoría de acciones
-│   ├── auth.middleware.js     # Autenticación JWT
-│   ├── planLimits.middleware.js # Límites por plan
-│   ├── rateLimit.middleware.js  # Control de tasa de requests
-│   └── validation.middleware.js # Validación de datos
-│
-├── routes/                        # Rutas de la API
-│   ├── conjunto.routes.js       # /api/conjunto
-│   ├── parqueadero.routes.js    # /api/parqueadero
-│   ├── scripts.routes.js        # /api/scripts
-│   ├── telemetria.routes.js     # /api/telemetria
-│   ├── usuario.routes.js        # /api/usuario
-│   └── visitante.routes.js      # /api/visitante
-│
-├── services/                      # Servicios de negocio
-│   ├── conjuntoService.js       # Lógica de conjuntos
-│   ├── parqueaderoService.js    # Lógica de parqueaderos
-│   └── visitanteService.js      # Lógica de visitantes
-│
-├── frontend/                      # Frontend React + Vite
+├── frontend/                       # React 19 + Vite + Tailwind CSS 4
 │   ├── src/
-│   │   ├── pages/               # Páginas principales
+│   │   ├── pages/
 │   │   │   ├── Login.jsx
 │   │   │   ├── AdminDashboard.jsx
 │   │   │   ├── ResidenteDashboard.jsx
 │   │   │   ├── PorteroDashboard.jsx
-│   │   │   └── VisitanteAcceso.jsx
-│   │   ├── services/
-│   │   │   └── api.js           # Cliente Axios
-│   │   ├── App.jsx              # Componente principal
-│   │   ├── App.css
-│   │   ├── index.css
-│   │   └── main.jsx
-│   ├── dist/                     # Build producción
-│   ├── index.html
-│   ├── vite.config.js
-│   ├── eslint.config.js
-│   └── package.json
+│   │   │   ├── VisitanteAcceso.jsx
+│   │   │   └── admin/              # Vistas modulares del admin
+│   │   ├── components/
+│   │   │   ├── Chatbot/ChatbotUI.jsx
+│   │   │   ├── ui/                 # ConfirmDialog, Toast, Pagination
+│   │   │   ├── Logo.jsx
+│   │   │   ├── ModeloMatematico.jsx
+│   │   │   └── QRScannerComponent.jsx
+│   │   ├── styles/
+│   │   │   └── design-system.css   # Tokens CSS + componentes globales
+│   │   ├── services/api.js         # Axios con interceptor auth
+│   │   └── App.jsx                 # Routing por rol
+│   └── public/
+│       └── safeentry-logo.png
 │
-├── public/                        # Frontend PWA (HTML/CSS/JS)
-│   ├── LandingPage/
-│   │   └── Landing.html          # Página de inicio
-│   ├── Vista.html                # Dashboard principal
-│   ├── Vistaadmin.html           # Dashboard admin
-│   ├── VistaSuperadmin.html      # Dashboard superadmin
-│   ├── Vistaporteria.html        # Dashboard portería
-│   ├── Vistaporteriaregistrar.html
-│   ├── Vistaporteriaactualizar.html
-│   ├── Vistaresidente.html       # Dashboard residente
-│   ├── ReconocimientoPlacas.html # UI reconocimiento LPR
-│   ├── Weka.html                 # UI modelo predictivo
-│   ├── manifest.json             # PWA manifest
-│   ├── sw.js                     # Service Worker
-│   ├── script.js                 # Scripts globales
-│   └── Style.css                 # Estilos globales
-│
-├── Reconocimiento/                # Motor LPR (Python)
-│   ├── Placascolombianas.py      # Detección de placas (YOLOv8)
-│   ├── yolov8n.pt                # Modelo YOLOv8
-│   ├── requirements.txt
-│   ├── Dockerfile.local
-│   └── README.md
-│
-├── qr-scanner/                    # Escáner QR (Python)
-│   ├── qr_scanner.py             # Escáner principal
-│   ├── test_qr.py                # Tests
-│   ├── test_qr_opencv.py         # Tests OpenCV
-│   ├── requirements.txt
-│   ├── Dockerfile.local
-│   └── README.md
-│
-├── ml_services/                   # Machine Learning
-│   ├── predict.js                # Predicciones Node.js
-│   ├── convert_to_word.py        # Conversión a Word
-│   ├── pruebamodelopredictivo.arff # Datos Weka
-│   └── yolov8n.pt                # Modelo YOLO
-│
-├── scripts/                       # Scripts de utilidad
-│   ├── instalar.bat              # Instalación
-│   ├── iniciar.bat               # Iniciar servicios
-│   ├── detener.bat               # Detener servicios
-│   ├── backup.bat                # Respaldos
-│   ├── publicar-imagenes.bat     # Gestión imágenes
-│   ├── migrate-multitenant.js    # Migración multi-tenant
-│   ├── diagnostico-multitenant.js # Diagnóstico
-│   └── fix-visitantes.js         # Reparación visitantes
-│
-├── cliente/                       # Cliente alternativo
-│   ├── docker-compose.yml
-│   ├── iniciar.bat
-│   ├── detener.bat
-│   ├── instalar.bat
-│   └── README.md
-│
-├── docs/                          # Documentación
-│   ├── Especificaciones_LPR_Comercial.docx
-│   └── Safe-final.png
-│
-├── .github/workflows/             # CI/CD
-│   └── master_safe-entry.yml     # Deploy automático
-│
-├── server.js                      # Punto de entrada Express
-├── package.json                   # Dependencias backend
-├── Dockerfile                     # Imagen Docker principal
-├── docker-compose.yml             # Orquestación producción
-├── docker-compose-local.yml       # Orquestación desarrollo
-├── .env.example                   # Variables de entorno ejemplo
-├── .env.local.example             # Variables locales ejemplo
-├── MANUAL_NUBE_MONGODB.md         # Guía MongoDB Atlas
-├── MongoAtlas-PowerBI-Setup.md   # Guía PowerBI
-└── INSTALACION_LOCAL.md          # Guía instalación local
+├── Reconocimiento/                 # LPR — YOLOv8 + OpenCV (Python)
+├── qr-scanner/                     # Escáner QR (Python)
+├── scripts/                        # Utilidades de mantenimiento
+├── server.js                       # Punto de entrada Express
+├── Dockerfile
+├── docker-compose.yml              # Producción
+├── docker-compose.demo.yml         # Demo local completo
+├── .env.example                    # Plantilla de variables de entorno
+└── CLAUDE.md                       # Guía de arquitectura para IA
 ```
 
 ---
 
-## Variables de Entorno
+## Arquitectura Multitenant
 
-Crear archivo `.env` basado en `.env.example`:
+Cada **Conjunto** residencial es un tenant aislado:
 
-```env
-# Servidor
-NODE_ENV=development
-PORT=5000
-
-# Base de datos
-MONGODB_URI=mongodb://localhost:27017/admin_residencial
-
-# JWT
-JWT_SECRET=tu_secreto_muy_seguro
-
-# Frontend
-FRONTEND_URL_LOCAL=http://localhost:5173
-FRONTEND_URL_PROD=https://tu-dominio.com
-```
+- Todas las colecciones llevan campo `conjunto: ObjectId`
+- `getConjuntoId(req)` extrae el tenant del JWT
+- `getTenantFilter(req)` aplica el filtro automáticamente
+- El **superadmin** puede impersonar cualquier rol vía `POST /api/usuarios/impersonar`
 
 ---
 
-## Roles de Usuario
+## Roles y Permisos
 
-| Rol | Permisos |
-|-----|----------|
-| **Superadmin** | Acceso total, gestión de conjuntos, telemetría |
-| **Admin** | Gestión de su conjunto, usuarios, visitantes |
-| **Residente** | Ver sus datos, registrar visitantes, parqueaderos |
-| **Portero** | Control de acceso, validar visitantes, escaneo QR |
+| Rol | Dashboard | Permisos principales |
+|-----|-----------|---------------------|
+| `superadmin` | AdminDashboard (badge morado) | Acceso global, gestión de conjuntos, telemetría, impersonación |
+| `admin` | AdminDashboard (badge azul) | Su conjunto: usuarios, visitantes, parqueaderos, auditoría, modelo PL |
+| `residente` | ResidenteDashboard | Ver sus datos, registrar visitantes, generar QR, gestionar vehículo |
+| `porteria` | PorteroDashboard | Control de acceso, validar QR, registrar ingreso/salida |
 
 ---
 
-## API Endpoints
+## API — Endpoints Principales
 
 ### Autenticación
-- `POST /api/usuario/login` - Iniciar sesión
-- `POST /api/usuario/register` - Registrar usuario
-
-### Conjuntos
-- `GET /api/conjunto` - Listar conjuntos
-- `POST /api/conjunto` - Crear conjunto
-- `PUT /api/conjunto/:id` - Actualizar conjunto
-
-### Usuarios
-- `GET /api/usuario` - Listar usuarios
-- `PUT /api/usuario/:id` - Actualizar usuario
-- `DELETE /api/usuario/:id` - Eliminar usuario
+```
+POST /api/usuarios/login                          → { token, refreshToken, usuario }
+POST /api/usuarios/impersonar                     → JWT del rol impersonado (solo superadmin)
+```
 
 ### Visitantes
-- `GET /api/visitante` - Listar visitantes
-- `POST /api/visitante` - Registrar visitante
-- `PUT /api/visitante/:id` - Actualizar visitante
+```
+POST /api/visitantes/qr/ingresar/:token           → Valida QR y registra entrada (público)
+GET  /api/visitantes/qr/verificar/:token          → Solo verifica sin registrar (público)
+POST /api/visitantes/:id/registrar-ingreso        → Entrada manual (portero/admin)
+POST /api/visitantes/:id/registrar-salida         → Salida + libera plaza (portero/admin)
+```
 
 ### Parqueaderos
-- `GET /api/parqueadero` - Listar parqueaderos
-- `POST /api/parqueadero` - Asignar parqueadero
+```
+GET  /api/parqueaderos/estadisticas               → Conteos por estado y categoría
+GET  /api/parqueaderos/historial                  → Accesos paginados con filtros
+```
 
-### Telemetría
-- `POST /api/telemetria/heartbeat` - Heartbeat de instalación
-- `GET /api/telemetria/instalaciones` - Listar instalaciones
+### Modelo PL (académico)
+```
+GET  /api/modelo/parametros/:conjuntoId           → Parámetros calculados desde BD real
+```
 
 ---
 
-## Puertos por Defecto
+## Flujo de Acceso de Visitante
 
-| Servicio | Puerto |
-|----------|--------|
-| Backend API | 5000 |
-| Frontend Dev | 5173 |
-| MongoDB | 27017 |
+```
+Residente registra visitante  →  Se genera QR (token + 10 min expiración)
+                              →  Residente comparte QR al visitante
+
+Visitante llega a portería    →  Muestra QR en VisitanteAcceso
+
+Portero escanea QR            →  POST /api/visitantes/qr/ingresar/:token
+                              →  Sistema valida, registra entrada y cambia estado → "ingresado"
+
+Portero registra salida       →  POST /api/visitantes/:id/registrar-salida
+                              →  Estado → "salido" + plaza de parqueadero liberada
+```
 
 ---
 
-## Arquitectura Modular (Nueva Estructura)
+## Despliegue en Producción
 
-El proyecto está migrando a una **arquitectura modular por features**. Ver [MIGRACION.md](./MIGRACION.md) para detalles.
+| Servicio | Plataforma | URL |
+|----------|-----------|-----|
+| Frontend | Vercel | [safe-entry-neon.vercel.app](https://safe-entry-neon.vercel.app) |
+| Backend  | Render (free) | [safeentry-backend.onrender.com](https://safeentry-backend.onrender.com) |
+| Base de datos | MongoDB Atlas | Free tier M0 |
 
-### Nueva Estructura `src/`
-
-```
-src/
-├── modules/                    # Módulos de negocio
-│   ├── usuarios/
-│   │   ├── usuario.model.js
-│   │   └── index.js
-│   ├── visitantes/
-│   │   ├── visitante.model.js
-│   │   ├── visitante.service.js
-│   │   └── index.js
-│   ├── parqueaderos/
-│   │   ├── parqueadero.model.js
-│   │   ├── parqueadero.service.js
-│   │   └── index.js
-│   ├── conjuntos/
-│   │   ├── conjunto.model.js
-│   │   ├── conjunto.service.js
-│   │   └── index.js
-│   └── telemetria/
-│       ├── instalacion.model.js
-│       └── index.js
-│
-├── shared/                     # Código compartido
-│   ├── config/
-│   │   ├── database.js
-│   │   ├── logger.js
-│   │   ├── cache.js
-│   │   └── app.config.js
-│   ├── middlewares/
-│   │   ├── auth.middleware.js
-│   │   ├── audit.middleware.js
-│   │   ├── rateLimit.middleware.js
-│   │   ├── planLimits.middleware.js
-│   │   └── validation.middleware.js
-│   ├── models/
-│   │   ├── auditLog.js
-│   │   └── historialAcceso.js
-│   └── index.js
-│
-└── index.js                    # Punto de entrada principal
-```
-
-### Cómo Importar (Nuevo)
-
-```javascript
-// Método recomendado
-const { models, middlewares, logger } = require('./src');
-
-// O importar específicamente
-const Usuario = require('./src/modules/usuarios/usuario.model');
-const { verificarToken } = require('./src/shared/middlewares/auth.middleware');
-```
+> **Nota Render free tier:** El backend duerme tras 15 min de inactividad. El primer request tarda ~50 segundos en despertar.
 
 ---
 
 ## Licencia
 
-ISC
+ISC — Proyecto académico SafeEntry · 2024-2026

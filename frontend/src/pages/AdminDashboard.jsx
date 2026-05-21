@@ -47,12 +47,13 @@ export default function AdminDashboard({ user }) {
   }, []);
 
   /* ── React Query: core data ── */
-  const { data: usuarios = [] } = useQuery({
+  const { data: usuarios = [], isError: usuariosError } = useQuery({
     queryKey: ['usuarios'],
     queryFn: async () => {
       const res = await api.get('/usuarios');
       return Array.isArray(res.data) ? res.data : [];
     },
+    retry: 2,
   });
 
   const { data: visitantes = [] } = useQuery({
@@ -454,51 +455,58 @@ export default function AdminDashboard({ user }) {
         </header>
 
         {/* Views */}
-        {view === 'dashboard' && <DashboardView />}
-
-        {view === 'conjuntos' && (
-          <ConjuntosView
-            conjuntos={conjuntos}
-            showToast={showToast}
-          />
+        {usuariosError && (
+          <div style={{ background: 'var(--se-error-dim)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.82rem', color: 'var(--se-error)', fontWeight: 600 }}>
+            <span>⚠️</span> No se pudieron cargar los datos del servidor. Verifica tu conexión e intenta recargar la página.
+          </div>
         )}
 
-        {view === 'usuarios' && (
-          <UsuariosView
-            usuarios={usuarios}
-            conjuntos={conjuntos}
-            isSuperAdmin={isSuperAdmin}
-            showToast={showToast}
-            openConfirm={openConfirm}
-            closeConfirm={closeConfirm}
-          />
-        )}
+        <div key={view} className="se-fade-in">
+          {view === 'dashboard' && <DashboardView />}
 
-        {view === 'visitantes' && (
-          <VisitantesView
-            visitantes={visitantes}
-            conjuntos={conjuntos}
-            showToast={showToast}
-          />
-        )}
+          {view === 'conjuntos' && (
+            <ConjuntosView
+              conjuntos={conjuntos}
+              showToast={showToast}
+            />
+          )}
 
-        {view === 'parqueaderos' && (
-          <ParqueaderosView
-            parkStats={parqueaderosStats}
-            parkData={parqueaderosTorre}
-            conjuntos={conjuntos}
-            showToast={showToast}
-          />
-        )}
+          {view === 'usuarios' && (
+            <UsuariosView
+              usuarios={usuarios}
+              conjuntos={conjuntos}
+              isSuperAdmin={isSuperAdmin}
+              showToast={showToast}
+              openConfirm={openConfirm}
+              closeConfirm={closeConfirm}
+            />
+          )}
 
-        {view === 'auditoria' && (
-          <AuditoriaView conjuntos={conjuntos} />
-        )}
+          {view === 'visitantes' && (
+            <VisitantesView
+              visitantes={visitantes}
+              conjuntos={conjuntos}
+              showToast={showToast}
+            />
+          )}
 
-        {view === 'modelo' && <ModeloMatematico />}
+          {view === 'parqueaderos' && (
+            <ParqueaderosView
+              parkStats={parqueaderosStats}
+              parkData={parqueaderosTorre}
+              conjuntos={conjuntos}
+              showToast={showToast}
+            />
+          )}
 
-        {view === 'simulador' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5 se-fade-in">
+          {view === 'auditoria' && (
+            <AuditoriaView conjuntos={conjuntos} />
+          )}
+
+          {view === 'modelo' && <ModeloMatematico />}
+
+          {view === 'simulador' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
             {[
               { title: 'LPR (Cámara Placas)', desc: 'Modelo de IA YOLOv8 para detección de placas vehiculares', icon: Video,  accentColor: '#0EA5E9', endpoint: '/scripts/lpr' },
               { title: 'Escáner Pases QR',    desc: 'Validación de códigos QR de acceso para visitantes',       icon: QrCode, accentColor: '#10B981', endpoint: '/scripts/qr'  },
@@ -533,7 +541,8 @@ export default function AdminDashboard({ user }) {
               </div>
             ))}
           </div>
-        )}
+          )}
+        </div>
       </main>
 
       <ConfirmDialog

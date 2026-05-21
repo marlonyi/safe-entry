@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Car, KeyRound, Plus, Shield, X, Clock, ArrowRightCircle, UserCheck, Activity, MapPin, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
+import { Home, Users, Car, KeyRound, Plus, Shield, X, Clock, ArrowRightCircle, UserCheck, Activity, MapPin, Menu, ChevronLeft, ChevronRight, CheckCircle2, Copy, Check } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
 import { useToast } from '../components/ui/Toast';
@@ -8,6 +9,7 @@ export default function ResidenteDashboard({ user }) {
   const { showToast, ToastContainer } = useToast();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
   const [view, setView] = useState('home');
 
   /* Track desktop breakpoint for sidebar offset */
@@ -46,6 +48,8 @@ export default function ResidenteDashboard({ user }) {
   const [selectedVisitante, setSelectedVisitante] = useState(null);
   const [loadingCodigo, setLoadingCodigo] = useState(false);
   const [codigoDinamico, setCodigoDinamico] = useState(null);
+  const [visitanteCreado, setVisitanteCreado] = useState(null);
+  const [copiedField, setCopiedField] = useState(null);
 
   const fetchVisitantes = async () => {
     try {
@@ -53,7 +57,7 @@ export default function ResidenteDashboard({ user }) {
       const resp = await api.get(`/visitantes/misVisitantes/${user.id}`);
       setVisitantes(unwrap(resp));
     } catch (error) {
-      console.error("Error al cargar visitantes:", error);
+      showToast('No se pudieron cargar los visitantes. Intenta de nuevo.', 'error');
     } finally {
       setLoading(false);
     }
@@ -109,21 +113,31 @@ export default function ResidenteDashboard({ user }) {
     e.preventDefault();
     setErrorMsg('');
     setSuccessMsg('');
+    setLoading(true);
     try {
-      await api.post('/visitantes', {
+      const resp = await api.post('/visitantes', {
         nombreVisitante: nuevoVisitante.nombre,
         apellidoVisitante: nuevoVisitante.apellido,
         cedulaVisitante: nuevoVisitante.cedula,
         placaVisitante: nuevoVisitante.placaVehiculo || 'N/A',
         residenteId: user.id
       });
-      setSuccessMsg('Visitante creado exitosamente.');
+      const creado = resp.data?.visitante || resp.data;
+      setVisitanteCreado(creado);
       setNuevoVisitante({ nombre: '', apellido: '', cedula: '', placaVehiculo: '' });
       fetchVisitantes();
-      setTimeout(() => setView('visitantes'), 2000);
     } catch (err) {
       setErrorMsg(err.response?.data?.error || 'Error al registrar visitante');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleCopy = (text, field) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    });
   };
 
   const handleGuardarVehiculo = async (e) => {
@@ -416,9 +430,17 @@ export default function ResidenteDashboard({ user }) {
 
         <div style={{ padding: '0 0 0.5rem' }}>
           {loading ? (
-            <div style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>
-              <div style={{ width: 32, height: 32, border: '2px solid var(--se-border)', borderTopColor: 'var(--se-accent)', borderRadius: '50%', margin: '0 auto 10px', animation: 'se-arc-spin 0.8s linear infinite' }} />
-              Cargando...
+            <div style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {[1, 2, 3].map(i => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '0.75rem', borderRadius: 10, border: '1px solid var(--se-border)', background: 'var(--se-bg)' }}>
+                  <div className="se-skeleton" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 7 }}>
+                    <div className="se-skeleton" style={{ height: 12, width: `${55 + i * 10}%`, borderRadius: 6 }} />
+                    <div className="se-skeleton" style={{ height: 10, width: `${35 + i * 5}%`, borderRadius: 6 }} />
+                  </div>
+                  <div className="se-skeleton" style={{ height: 26, width: 72, borderRadius: 8, flexShrink: 0 }} />
+                </div>
+              ))}
             </div>
           ) : (
             <div style={{ overflowX: 'auto' }}>
@@ -436,8 +458,19 @@ export default function ResidenteDashboard({ user }) {
                 <tbody>
                   {visitantes.length === 0 ? (
                     <tr>
-                      <td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>
-                        No tienes visitantes registrados aún.
+                      <td colSpan="6" style={{ padding: '0' }}>
+                        <div style={{ padding: '2rem 1.5rem', textAlign: 'center', borderTop: '1px solid var(--se-border)' }}>
+                          <UserCheck size={32} style={{ color: 'var(--se-border)', margin: '0 auto 10px' }} />
+                          <p style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--se-text-muted)', marginBottom: 6 }}>
+                            Aún no tienes visitantes registrados
+                          </p>
+                          <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', marginBottom: '1rem', opacity: 0.75 }}>
+                            Registra a un visitante para generarle un código QR de acceso
+                          </p>
+                          <button onClick={() => setView('crear')} className="se-btn-primary" style={{ borderRadius: 10, padding: '0.5rem 1.25rem', fontSize: '0.82rem' }}>
+                            <Plus size={15} /> Registrar Visitante
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ) : visitantes.map((v, i) => {
@@ -565,7 +598,8 @@ export default function ResidenteDashboard({ user }) {
           </div>
         )}
         {vehiculoSuccess && (
-          <div style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#065F46', fontWeight: 600 }}>
+          <div className="se-fade-in" style={{ background: 'rgba(16,185,129,0.10)', border: '1px solid rgba(16,185,129,0.25)', borderRadius: 10, padding: '0.75rem 1rem', marginBottom: '1.25rem', fontSize: '0.8rem', color: '#065F46', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <CheckCircle2 size={16} className="se-check-pop" style={{ color: '#10B981', flexShrink: 0 }} />
             {vehiculoSuccess}
           </div>
         )}
@@ -649,12 +683,12 @@ export default function ResidenteDashboard({ user }) {
       }} />
 
       {/* Logo area */}
-      <div style={{ padding: collapsed ? '1.25rem 0' : '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-        {collapsed ? (
-          <Home size={22} style={{ color: 'var(--se-accent)' }} />
-        ) : (
-          <Logo theme="dark" subtitle="Panel Residente" />
-        )}
+      <div style={{ padding: 0, borderBottom: '1px solid var(--se-panel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <img
+          src="/safeentry-logo.png"
+          alt="SafeEntry"
+          style={{ width: '100%', height: collapsed ? 44 : 90, objectFit: collapsed ? 'contain' : 'cover', objectPosition: 'center' }}
+        />
       </div>
 
       {/* Nav items */}
@@ -733,39 +767,47 @@ export default function ResidenteDashboard({ user }) {
       {/* Sidebar — desktop */}
       <aside
         className="hidden md:flex flex-col"
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
         style={{
           width: desktopWidth,
           flexShrink: 0,
           position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
           background: 'var(--se-panel-bg)',
           borderRight: '1px solid var(--se-panel-border)',
-          overflow: 'hidden',
-          transition: 'width 0.3s ease-in-out',
+          overflow: 'visible',
+          transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
         }}
       >
-        {/* Desktop toggle button */}
+        {/* Inner clip container */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {renderSidebarContent(() => {}, sidebarCollapsed)}
+        </div>
+
+        {/* Desktop toggle button — appears on hover */}
         <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+          onClick={() => setSidebarCollapsed(c => !c)}
+          aria-label={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
           style={{
-            position: 'absolute', right: -12, top: 72, zIndex: 30,
-            width: 24, height: 24,
-            background: 'var(--se-panel-bg)',
-            border: '1px solid var(--se-panel-border)',
+            position: 'absolute', right: -13, top: 72, zIndex: 30,
+            width: 26, height: 26,
+            background: '#1E293B',
+            border: '1px solid rgba(14,165,233,0.3)',
             borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-            transition: 'box-shadow 0.15s',
-            color: 'var(--se-text-secondary)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            color: 'var(--se-accent)',
+            opacity: sidebarHovered ? 1 : 0,
+            transform: sidebarHovered ? 'scale(1)' : 'scale(0.8)',
+            transition: 'opacity 0.2s ease, transform 0.2s ease, box-shadow 0.15s',
+            pointerEvents: sidebarHovered ? 'auto' : 'none',
           }}
-          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.25)'}
-          onMouseLeave={e => e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)'}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(14,165,233,0.2), 0 4px 12px rgba(0,0,0,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)'; }}
         >
-          {sidebarCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+          {sidebarCollapsed ? <ChevronRight size={13} strokeWidth={2.5} /> : <ChevronLeft size={13} strokeWidth={2.5} />}
         </button>
-
-        {renderSidebarContent(() => {}, sidebarCollapsed)}
       </aside>
 
       {/* Mobile sidebar overlay */}
@@ -823,7 +865,7 @@ export default function ResidenteDashboard({ user }) {
                   width: 38, height: 38, borderRadius: 10,
                   background: 'var(--se-bg)', border: '1px solid var(--se-border)',
                   color: 'var(--se-text-secondary)',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  alignItems: 'center', justifyContent: 'center',
                   cursor: 'pointer', flexShrink: 0,
                 }}
               >
@@ -864,14 +906,83 @@ export default function ResidenteDashboard({ user }) {
         </header>
 
         {/* Views */}
-        {view === 'home'      && renderHome()}
-        {view === 'visitantes'&& renderVisitantes()}
-        {view === 'crear'     && renderCrear()}
-        {view === 'vehiculo'  && renderVehiculo()}
+        <div key={view} className="se-fade-in">
+          {view === 'home'      && renderHome()}
+          {view === 'visitantes'&& renderVisitantes()}
+          {view === 'crear'     && renderCrear()}
+          {view === 'vehiculo'  && renderVehiculo()}
+        </div>
       </main>
 
       {/* Global: Toasts */}
       <ToastContainer />
+
+      {/* Modal QR post-creación */}
+      {visitanteCreado && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0.75rem', background: 'rgba(8,13,20,0.75)', backdropFilter: 'blur(6px)' }}
+          onClick={() => { setVisitanteCreado(null); setView('visitantes'); }}>
+          <div style={{ background: 'var(--se-surface)', borderRadius: 20, maxWidth: 420, width: '100%', overflow: 'hidden', boxShadow: '0 32px 80px rgba(0,0,0,0.4)', border: '1px solid var(--se-border)' }}
+            onClick={e => e.stopPropagation()}>
+            {/* Header verde éxito */}
+            <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
+            <div style={{ padding: '1.5rem', textAlign: 'center' }}>
+              {/* Icono éxito */}
+              <div style={{ width: 56, height: 56, borderRadius: '50%', background: 'rgba(16,185,129,0.12)', border: '1.5px solid rgba(16,185,129,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 1rem' }}>
+                <CheckCircle2 size={28} style={{ color: '#10B981' }} />
+              </div>
+              <h3 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)', marginBottom: 4 }}>
+                ¡Visitante registrado!
+              </h3>
+              <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)', marginBottom: '1.25rem' }}>
+                Comparte este QR con <strong style={{ color: 'var(--se-text-primary)' }}>{visitanteCreado?.nombreVisitante} {visitanteCreado?.apellidoVisitante}</strong>
+              </p>
+
+              {/* QR Code */}
+              {visitanteCreado?.qrToken ? (
+                <div style={{ background: '#fff', borderRadius: 16, padding: '1rem', display: 'inline-block', marginBottom: '1rem', boxShadow: '0 4px 16px rgba(0,0,0,0.1)' }}>
+                  <QRCodeSVG
+                    value={`${window.location.origin}/acceso-visitante?token=${visitanteCreado.qrToken}`}
+                    size={180}
+                    level="H"
+                    includeMargin={false}
+                  />
+                </div>
+              ) : (
+                <div style={{ background: 'var(--se-bg)', borderRadius: 12, padding: '1rem', marginBottom: '1rem', fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>
+                  El visitante debe obtener su código de acceso dinámico para ingresar.
+                </div>
+              )}
+
+              {/* Info del visitante */}
+              <div style={{ background: 'var(--se-bg)', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', textAlign: 'left' }}>
+                {[
+                  { label: 'Cédula', value: visitanteCreado?.cedulaVisitante },
+                  { label: 'Placa', value: visitanteCreado?.placaVehiculo !== 'N/A' ? visitanteCreado?.placaVehiculo : null },
+                ].filter(f => f.value).map(({ label, value }) => (
+                  <div key={label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.3rem 0', borderBottom: '1px solid var(--se-border)' }}>
+                    <span style={{ fontSize: '0.72rem', color: 'var(--se-text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>{label}</span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>{value}</span>
+                      <button onClick={() => handleCopy(value, label)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: copiedField === label ? '#10B981' : 'var(--se-text-muted)', padding: 2 }}>
+                        {copiedField === label ? <Check size={13} /> : <Copy size={13} />}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => { setVisitanteCreado(null); setView('visitantes'); }} className="se-btn-ghost" style={{ flex: 1, borderRadius: 12, justifyContent: 'center' }}>
+                  Ver mis visitantes
+                </button>
+                <button onClick={() => { setVisitanteCreado(null); }} className="se-btn-primary" style={{ flex: 1, borderRadius: 12, justifyContent: 'center' }}>
+                  Registrar otro
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Modal Código de Acceso */}
       {showCodigoModal && selectedVisitante && (
@@ -980,7 +1091,7 @@ export default function ResidenteDashboard({ user }) {
 }
 
 /* ── Helper: empty state ── */
-function EmptyState({ icon: Icon, text }) {
+function EmptyState({ icon: Icon, text, subtext, actionLabel, onAction }) {
   return (
     <div style={{
       borderRadius: 12, padding: '2.5rem 1rem',
@@ -989,7 +1100,17 @@ function EmptyState({ icon: Icon, text }) {
       background: 'var(--se-bg)',
     }}>
       <Icon size={30} style={{ color: 'var(--se-border)', margin: '0 auto 10px' }} />
-      <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>{text}</p>
+      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--se-text-muted)' }}>{text}</p>
+      {subtext && <p style={{ fontSize: '0.72rem', color: 'var(--se-text-muted)', marginTop: 4, opacity: 0.7 }}>{subtext}</p>}
+      {actionLabel && onAction && (
+        <button
+          onClick={onAction}
+          className="se-btn-primary"
+          style={{ marginTop: '1rem', borderRadius: 10, padding: '0.5rem 1.25rem', fontSize: '0.8rem' }}
+        >
+          {actionLabel}
+        </button>
+      )}
     </div>
   );
 }

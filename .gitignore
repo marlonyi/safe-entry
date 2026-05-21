@@ -1,45 +1,81 @@
-# Node modules e info
+# ── Dependencias ──────────────────────────────────────────────
 node_modules/
-package-lock.json
 
-# Variables de entorno
+# ── Variables de entorno (NUNCA subir secretos) ───────────────
 .env
-.env.*
+.env.docker
+.env.local
+.env.production
+.env.staging
+.env.test
+# Permitir archivos de ejemplo (sin secretos reales)
+!.env.example
+!.env.local.example
+!.env.docker.example
 
-# Logs
+# ── Logs ──────────────────────────────────────────────────────
 logs/
 *.log
+npm-debug.log*
+yarn-debug.log*
 
-# Sistema Operativo
-.DS_Store
-Thumbs.db
-desktop.ini
+# ── Builds y temporales ───────────────────────────────────────
+dist/
+build/
+tmp/
+temp/
+.cache/
+coverage/
 
-# IDEs
-.vscode/
-.idea/
+# ── Uploads del usuario (datos en producción) ─────────────────
+uploads/
 
-# Python
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
-*.class
 *.so
 venv/
 ENV/
 .venv/
 env/
+*.egg-info/
+.pytest_cache/
 
-# Modelos de Machine Learning e Imágenes
+# ── Modelos de ML (archivos grandes, usar Git LFS si se necesitan) ──
 *.pt
-*.arff
 *.onnx
-yolov8n.pt
+*.arff
+*.h5
+*.pkl
 
-# Builds y temporales
-dist/
-build/
-tmp/
-temp/
+# ── Sistema Operativo ─────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
 
-# Uploads
-uploads/
+# ── IDEs ──────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+*.swp
+
+# ── Docker ────────────────────────────────────────────────────
+# (Los docker-compose sí van al repo, solo ignorar overrides locales)
+docker-compose.override.yml
+
+# ── Certificados y claves ─────────────────────────────────────
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ── Misceláneos ───────────────────────────────────────────────
+*.tgz
+*.tar.gz
+.npmrc

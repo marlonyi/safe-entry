@@ -12,7 +12,10 @@ export default function PorteroDashboard({ user }) {
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: '', message: '', onConfirm: null, variant: 'warning' });
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
   const [view, setView] = useState('dashboard');
+  const [busquedaVisitantes, setBusquedaVisitantes] = useState('');
+  const [filtroEstado, setFiltroEstado] = useState('todos');
   const [tipoTab, setTipoTab] = useState('residentes');
 
   /* Track desktop breakpoint for sidebar offset */
@@ -42,14 +45,14 @@ export default function PorteroDashboard({ user }) {
   /* ── Queries ── */
 
   // Visitantes: refetch every 3 s (live access control data)
-  const { data: visitantes = [] } = useQuery({
+  const { data: visitantes = [], isError: visitantesError, isLoading: visitantesLoading } = useQuery({
     queryKey: ['porteriaVisitantes'],
-    queryFn: async () => unwrap(await api.get('/visitantes').catch(() => ({ data: [] }))),
+    queryFn: async () => unwrap(await api.get('/visitantes')),
     refetchInterval: () => (!document.hidden ? 3000 : false),
     staleTime: 0,
+    retry: 2,
   });
 
-  // Historial reciente: refetch every 3 s together with visitantes
   const { data: historial = [] } = useQuery({
     queryKey: ['porteriaHistorial'],
     queryFn: async () => unwrap(await api.get('/parqueaderos/historial?limit=20&page=1').catch(() => ({ data: [] }))),
@@ -57,7 +60,6 @@ export default function PorteroDashboard({ user }) {
     staleTime: 0,
   });
 
-  // Stats from historial endpoint: refetch every 3 s
   const { data: statsHist = {} } = useQuery({
     queryKey: ['porteriaStatsHist'],
     queryFn: async () => {
@@ -68,12 +70,12 @@ export default function PorteroDashboard({ user }) {
     staleTime: 0,
   });
 
-  // Parqueaderos: low-frequency, 5 min stale — no need for 3 s polling
-  const { data: parqueaderos = [], isFetching: parkLoading } = useQuery({
+  const { data: parqueaderos = [], isFetching: parkLoading, isError: parqueaderosError } = useQuery({
     queryKey: ['porteriaParqueaderos'],
-    queryFn: async () => unwrap(await api.get('/parqueaderos').catch(() => ({ data: [] }))),
+    queryFn: async () => unwrap(await api.get('/parqueaderos')),
     staleTime: 300_000,
     refetchInterval: 60_000,
+    retry: 2,
   });
 
   /* ── Derived stats ── */
@@ -159,7 +161,7 @@ export default function PorteroDashboard({ user }) {
 
     return (
       <div className="se-fade-in space-y-6">
-        <div className="grid grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 md:gap-4">
           {statCards.map((s, i) => (
             <div key={i} className="se-card se-slide-up" style={{ borderRadius: 14, padding: '1.125rem', animationDelay: `${i * 0.06}s` }}>
               <div style={{ width: 36, height: 36, borderRadius: 10, marginBottom: 10, background: `${s.accentColor}1a`, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -191,8 +193,10 @@ export default function PorteroDashboard({ user }) {
                 <span className="se-badge se-badge-amber">{stats.visitantesPendientes} en total</span>
               </div>
               <div style={{ padding: '1rem' }}>
-                {visitantesPend.length === 0 ? (
-                  <EmptyState icon={UserCheck} text="No hay visitantes pendientes" />
+                {visitantesLoading ? (
+                  <SkeletonRows count={2} />
+                ) : visitantesPend.length === 0 ? (
+                  <EmptyState icon={UserCheck} text="No hay visitantes pendientes" subtext="Aparecerán aquí cuando un residente registre a un visitante" />
                 ) : (
                   <div className="space-y-2">
                     {visitantesPend.map((v, i) => (
@@ -222,8 +226,10 @@ export default function PorteroDashboard({ user }) {
                 <span className="se-badge se-badge-accent">{stats.visitantesDentro} activos</span>
               </div>
               <div style={{ padding: '1rem' }}>
-                {visitantesDentro.length === 0 ? (
-                  <EmptyState icon={UserCheck} text="No hay visitantes dentro" />
+                {visitantesLoading ? (
+                  <SkeletonRows count={2} />
+                ) : visitantesDentro.length === 0 ? (
+                  <EmptyState icon={UserCheck} text="No hay visitantes dentro" subtext="Los visitantes que ingresen aparecerán aquí en tiempo real" />
                 ) : (
                   <div className="space-y-2">
                     {visitantesDentro.map((v, i) => (
@@ -299,16 +305,28 @@ export default function PorteroDashboard({ user }) {
       return map[estado] || { bg: '#F1F5F9', color: 'var(--se-text-secondary)' };
     };
 
+    const visitantesFiltrados = visitantes
+      .filter(v => filtroEstado === 'todos' || v.estado === filtroEstado)
+      .filter(v => {
+        if (!busquedaVisitantes.trim()) return true;
+        const q = busquedaVisitantes.toLowerCase();
+        return (
+          `${v.nombre} ${v.apellido}`.toLowerCase().includes(q) ||
+          v.cedula?.toLowerCase().includes(q) ||
+          v.placaVehiculo?.toLowerCase().includes(q)
+        );
+      });
+
     return (
       <div className="se-card se-fade-in" style={{ borderRadius: 16, overflow: 'hidden' }}>
         <div style={{ height: 3, background: 'linear-gradient(90deg, #F59E0B, #0EA5E9)' }} />
-        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
           <div>
             <h2 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
               Listado de Visitantes
             </h2>
             <p style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', marginTop: 2 }}>
-              {visitantes.length} registrados
+              {visitantesFiltrados.length} de {visitantes.length} registrados
             </p>
           </div>
           <span className="se-badge se-badge-accent">
@@ -316,6 +334,30 @@ export default function PorteroDashboard({ user }) {
             Actualización automática
           </span>
         </div>
+
+        {/* Barra de búsqueda y filtros */}
+        <div style={{ padding: '0 1rem 1rem', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <input
+            type="text"
+            placeholder="Buscar por nombre, cédula o placa..."
+            value={busquedaVisitantes}
+            onChange={e => setBusquedaVisitantes(e.target.value)}
+            className="se-input"
+            style={{ flex: 1, minWidth: 200, fontSize: '0.82rem' }}
+          />
+          <select
+            value={filtroEstado}
+            onChange={e => setFiltroEstado(e.target.value)}
+            className="se-input"
+            style={{ width: 'auto', fontSize: '0.82rem', cursor: 'pointer' }}
+          >
+            <option value="todos">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="ingresado">Ingresado</option>
+            <option value="salido">Salido</option>
+          </select>
+        </div>
+
         <div style={{ overflowX: 'auto' }}>
           <table className="w-full se-table">
             <thead>
@@ -329,9 +371,11 @@ export default function PorteroDashboard({ user }) {
               </tr>
             </thead>
             <tbody>
-              {visitantes.length === 0 ? (
-                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>No hay visitantes</td></tr>
-              ) : visitantes.map((v, i) => {
+              {visitantesFiltrados.length === 0 ? (
+                <tr><td colSpan="6" style={{ textAlign: 'center', padding: '3rem', color: 'var(--se-text-muted)' }}>
+                  {busquedaVisitantes || filtroEstado !== 'todos' ? 'No se encontraron visitantes con ese criterio' : 'No hay visitantes registrados'}
+                </td></tr>
+              ) : visitantesFiltrados.map((v, i) => {
                 const badge = estadoBadge(v.estado);
                 return (
                   <tr key={v._id || i}>
@@ -490,12 +534,12 @@ export default function PorteroDashboard({ user }) {
       }} />
 
       {/* Logo area */}
-      <div style={{ padding: collapsed ? '1.25rem 0' : '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start' }}>
-        {collapsed ? (
-          <MonitorPlay size={22} style={{ color: 'var(--se-accent)' }} />
-        ) : (
-          <Logo theme="dark" subtitle="Portería · Control de Acceso" />
-        )}
+      <div style={{ padding: 0, borderBottom: '1px solid var(--se-panel-border)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+        <img
+          src="/safeentry-logo.png"
+          alt="SafeEntry"
+          style={{ width: '100%', height: collapsed ? 44 : 90, objectFit: collapsed ? 'contain' : 'cover', objectPosition: 'center' }}
+        />
       </div>
 
       {/* Nav items */}
@@ -521,20 +565,6 @@ export default function PorteroDashboard({ user }) {
           </button>
         ))}
       </nav>
-
-      {/* Live update indicator */}
-      <div style={{ padding: collapsed ? '0.625rem 0' : '0.625rem 1rem', borderTop: '1px solid var(--se-panel-border)', borderBottom: '1px solid var(--se-panel-border)' }}>
-        {collapsed ? (
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <span className="se-pulse-dot" style={{ width: 8, height: 8, borderRadius: '50%', background: '#10B981', display: 'block' }} />
-          </div>
-        ) : (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '0.5rem 0.75rem', borderRadius: 8, background: 'rgba(16,185,129,0.08)', border: '1px solid rgba(16,185,129,0.15)' }}>
-            <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', flexShrink: 0 }} />
-            <span style={{ fontSize: '0.7rem', color: '#10B981', fontWeight: 600 }}>Actualización cada 3s</span>
-          </div>
-        )}
-      </div>
 
       {/* User card */}
       <div style={{ padding: collapsed ? '1rem 0' : '1rem', position: 'relative' }}>
@@ -583,39 +613,47 @@ export default function PorteroDashboard({ user }) {
       {/* Sidebar — desktop */}
       <aside
         className="hidden md:flex flex-col"
+        onMouseEnter={() => setSidebarHovered(true)}
+        onMouseLeave={() => setSidebarHovered(false)}
         style={{
           width: desktopWidth,
           flexShrink: 0,
           position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
           background: 'var(--se-panel-bg)',
           borderRight: '1px solid var(--se-panel-border)',
-          overflow: 'hidden',
-          transition: 'width 0.3s ease-in-out',
+          overflow: 'visible',
+          transition: 'width 0.28s cubic-bezier(0.4,0,0.2,1)',
         }}
       >
-        {/* Desktop toggle button */}
+        {/* Inner clip container */}
+        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {renderSidebarContent(() => {}, sidebarCollapsed)}
+        </div>
+
+        {/* Desktop toggle button — appears on hover */}
         <button
-          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
-          title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+          onClick={() => setSidebarCollapsed(c => !c)}
+          aria-label={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
           style={{
-            position: 'absolute', right: -12, top: 72, zIndex: 30,
-            width: 24, height: 24,
-            background: 'var(--se-panel-bg)',
-            border: '1px solid var(--se-panel-border)',
+            position: 'absolute', right: -13, top: 72, zIndex: 30,
+            width: 26, height: 26,
+            background: '#1E293B',
+            border: '1px solid rgba(14,165,233,0.3)',
             borderRadius: '50%',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             cursor: 'pointer',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-            transition: 'box-shadow 0.15s',
-            color: 'var(--se-text-secondary)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+            color: 'var(--se-accent)',
+            opacity: sidebarHovered ? 1 : 0,
+            transform: sidebarHovered ? 'scale(1)' : 'scale(0.8)',
+            transition: 'opacity 0.2s ease, transform 0.2s ease, box-shadow 0.15s',
+            pointerEvents: sidebarHovered ? 'auto' : 'none',
           }}
-          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.25)'}
-          onMouseLeave={e => e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)'}
+          onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 0 0 3px rgba(14,165,233,0.2), 0 4px 12px rgba(0,0,0,0.3)'; }}
+          onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.3)'; }}
         >
-          {sidebarCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+          {sidebarCollapsed ? <ChevronRight size={13} strokeWidth={2.5} /> : <ChevronLeft size={13} strokeWidth={2.5} />}
         </button>
-
-        {renderSidebarContent(() => {}, sidebarCollapsed)}
       </aside>
 
       {/* Mobile overlay */}
@@ -660,7 +698,7 @@ export default function PorteroDashboard({ user }) {
               <button
                 className="md:hidden"
                 onClick={() => setSidebarOpen(true)}
-                style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--se-bg)', border: '1px solid var(--se-border)', color: 'var(--se-text-secondary)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
+                style={{ width: 38, height: 38, borderRadius: 10, background: 'var(--se-bg)', border: '1px solid var(--se-border)', color: 'var(--se-text-secondary)', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', flexShrink: 0 }}
               >
                 <Menu size={18} />
               </button>
@@ -685,9 +723,17 @@ export default function PorteroDashboard({ user }) {
           </div>
         </header>
 
-        {view === 'dashboard'    && renderDashboard()}
-        {view === 'visitantes'   && renderVisitantes()}
-        {view === 'parqueaderos' && renderParqueaderos()}
+        {(visitantesError || parqueaderosError) && (
+          <div style={{ background: 'var(--se-error-dim)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: 10, fontSize: '0.82rem', color: 'var(--se-error)', fontWeight: 600 }}>
+            <span>⚠️</span> Error de conexión con el servidor. Los datos mostrados pueden no estar actualizados.
+          </div>
+        )}
+
+        <div key={view} className="se-fade-in">
+          {view === 'dashboard'    && renderDashboard()}
+          {view === 'visitantes'   && renderVisitantes()}
+          {view === 'parqueaderos' && renderParqueaderos()}
+        </div>
       </main>
 
       <ConfirmDialog
@@ -733,11 +779,29 @@ function VisitanteRow({ v, accentColor, accentBg, action }) {
   );
 }
 
-function EmptyState({ icon: Icon, text }) {
+function EmptyState({ icon: Icon, text, subtext }) {
   return (
     <div style={{ borderRadius: 12, padding: '2rem 1rem', textAlign: 'center', border: '2px dashed var(--se-border)', background: 'var(--se-bg)' }}>
       <Icon size={28} style={{ color: 'var(--se-border)', margin: '0 auto 8px' }} />
-      <p style={{ fontSize: '0.8rem', color: 'var(--se-text-muted)' }}>{text}</p>
+      <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--se-text-muted)' }}>{text}</p>
+      {subtext && <p style={{ fontSize: '0.72rem', color: 'var(--se-text-muted)', marginTop: 4, opacity: 0.7 }}>{subtext}</p>}
+    </div>
+  );
+}
+
+function SkeletonRows({ count = 3 }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {Array.from({ length: count }).map((_, i) => (
+        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '0.5rem 0.75rem', borderRadius: 10, background: 'var(--se-bg)', border: '1px solid var(--se-border)' }}>
+          <div className="se-skeleton" style={{ width: 36, height: 36, borderRadius: '50%', flexShrink: 0 }} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div className="se-skeleton" style={{ height: 12, width: '60%', borderRadius: 6 }} />
+            <div className="se-skeleton" style={{ height: 10, width: '40%', borderRadius: 6 }} />
+          </div>
+          <div className="se-skeleton" style={{ height: 28, width: 64, borderRadius: 8, flexShrink: 0 }} />
+        </div>
+      ))}
     </div>
   );
 }

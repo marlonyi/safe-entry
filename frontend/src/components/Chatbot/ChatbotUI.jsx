@@ -72,7 +72,7 @@ const ChatbotUI = () => {
   return (
     <div className="fixed bottom-[82px] left-[10px] z-[100] flex flex-col items-start">
       {isOpen && (
-        <div className="mb-4 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[500px] animate-in slide-in-from-bottom-5 fade-in duration-300">
+        <div className="mb-4 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[360px] sm:h-[460px] md:h-[500px] animate-in slide-in-from-bottom-5 fade-in duration-300">
           {/* Header */}
           <div style={{ background: 'linear-gradient(135deg, #0c1a2e 0%, #0a2540 100%)', borderBottom: '1px solid rgba(14,165,233,0.2)' }} className="p-4 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">

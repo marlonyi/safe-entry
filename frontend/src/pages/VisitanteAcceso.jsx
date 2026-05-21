@@ -21,12 +21,15 @@ export default function VisitanteAcceso({ onBack }) {
   const [resultado, setResultado] = useState(null);
 
   const [currentTime, setCurrentTime] = useState('');
+  const [totpSegsRestantes, setTotpSegsRestantes] = useState(0);
   const inputRefs = useRef([]);
 
   useEffect(() => {
     const tick = () => {
       const now = new Date();
       setCurrentTime(now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+      const segs = 600 - (Math.floor(now.getTime() / 1000) % 600);
+      setTotpSegsRestantes(segs);
     };
     tick();
     const id = setInterval(tick, 1000);
@@ -287,7 +290,7 @@ export default function VisitanteAcceso({ onBack }) {
             }}>
               Código de Acceso
             </label>
-            <div style={{ display: 'flex', gap: 'clamp(4px, 2vw, 10px)', justifyContent: 'space-between' }}>
+            <div className="grid grid-cols-6 xs:grid-cols-6" style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 'clamp(4px, 2vw, 10px)' }}>
               {codigo.map((digit, i) => (
                 <input
                   key={i}
@@ -300,9 +303,9 @@ export default function VisitanteAcceso({ onBack }) {
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onFocus={(e) => e.target.select()}
                   style={{
-                    flex: 1, minWidth: 0, height: 52,
+                    width: '100%', minWidth: 0, height: 'clamp(44px, 12vw, 56px)',
                     textAlign: 'center',
-                    fontSize: '1.375rem', fontWeight: 800,
+                    fontSize: 'clamp(1rem, 5vw, 1.375rem)', fontWeight: 800,
                     background: digit ? 'var(--se-accent-dim)' : 'var(--se-bg)',
                     border: `2px solid ${digit ? 'var(--se-accent)' : 'var(--se-border)'}`,
                     borderRadius: 12,
@@ -314,9 +317,19 @@ export default function VisitanteAcceso({ onBack }) {
                 />
               ))}
             </div>
-            <p style={{ marginTop: 8, fontSize: '0.7rem', color: 'var(--se-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
-              <Clock size={11} /> El código cambia cada 10 min. Solicita uno nuevo si expiró.
-            </p>
+            <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Clock size={11} /> El código cambia cada 10 min.
+              </p>
+              <span style={{
+                fontSize: '0.7rem', fontWeight: 700,
+                color: totpSegsRestantes <= 60 ? '#EF4444' : totpSegsRestantes <= 120 ? '#F59E0B' : '#10B981',
+                display: 'flex', alignItems: 'center', gap: 3,
+              }}>
+                <Clock size={11} />
+                {Math.floor(totpSegsRestantes / 60)}:{String(totpSegsRestantes % 60).padStart(2, '0')} restantes
+              </span>
+            </div>
           </div>
 
           {/* Submit */}

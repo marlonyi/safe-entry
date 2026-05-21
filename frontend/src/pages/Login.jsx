@@ -372,14 +372,9 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
                     >
                       Contraseña
                     </label>
-                    <a
-                      href="#"
-                      style={{ fontSize: '0.75rem', color: 'var(--se-accent)', fontWeight: 500, textDecoration: 'none' }}
-                      onMouseEnter={(e) => (e.target.style.textDecoration = 'underline')}
-                      onMouseLeave={(e) => (e.target.style.textDecoration = 'none')}
-                    >
-                      ¿Olvidaste tu contraseña?
-                    </a>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--se-text-muted)', fontWeight: 500 }}>
+                      ¿Olvidaste tu contraseña? Contacta al administrador
+                    </span>
                   </div>
                   <div className="se-input-wrap">
                     <div
