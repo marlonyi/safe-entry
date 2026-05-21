@@ -114,29 +114,39 @@ body {
 .se-nav-item {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.625rem;
   width: 100%;
-  padding: 0.75rem 1rem;
-  border-radius: 0.75rem;
+  padding: 0.65rem 0.875rem;
+  border-radius: 0.625rem;
   font-weight: 500;
-  font-size: 0.875rem;
-  transition: all 0.2s ease;
+  font-size: 0.845rem;
+  transition: background 0.18s ease, color 0.18s ease, border-color 0.18s ease;
   border: 1px solid transparent;
-  color: #94A3B8;
+  color: #7E95B0;
   cursor: pointer;
   background: transparent;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .se-nav-item:hover {
-  background: rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.07);
   color: #CBD5E1;
 }
 .se-nav-item.active {
-  background: rgba(14,165,233,0.12);
-  color: #fff;
-  border-color: rgba(14,165,233,0.25);
+  background: rgba(14,165,233,0.13);
+  color: #F1F5F9;
+  border-color: rgba(14,165,233,0.22);
+  font-weight: 600;
 }
 .se-nav-item.active .se-nav-icon {
   color: var(--se-accent);
+}
+
+/* Collapsed icon-only state */
+.se-nav-item:focus-visible {
+  outline: 2px solid var(--se-accent);
+  outline-offset: 2px;
 }
 
 /* ── Primary button ── */
@@ -263,11 +273,15 @@ body {
 .se-user-card {
   display: flex;
   align-items: center;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border-radius: 0.75rem;
+  gap: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.625rem;
   background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.07);
+  transition: background 0.18s ease;
+}
+.se-user-card:hover {
+  background: rgba(255,255,255,0.08);
 }
 
 /* ── Scrollbar thin ── */
@@ -276,4 +290,71 @@ body {
 .se-scroll::-webkit-scrollbar-thumb {
   background: var(--se-border);
   border-radius: 999px;
+}
+
+
+/* ================================================================
+   RESPONSIVE — Mobile-first additions
+   Added for full mobile support (< 768px).
+   ================================================================ */
+
+/* Prevent horizontal overflow globally */
+html, body {
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Section header — tighter padding on mobile */
+@media (max-width: 640px) {
+  .se-section-header {
+    padding: 0.875rem 1rem;
+  }
+  .se-table thead th {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.65rem;
+  }
+  .se-table tbody td {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+  }
+  .se-btn-primary,
+  .se-btn-ghost {
+    padding: 0.55rem 1rem;
+    font-size: 0.8rem;
+  }
+  .se-badge {
+    font-size: 0.62rem;
+    padding: 0.2rem 0.5rem;
+  }
+  /* Nav items in sidebar — slightly tighter */
+  .se-nav-item {
+    padding: 0.625rem 0.875rem;
+    font-size: 0.82rem;
+  }
+  /* Cards — tighter border radius */
+  .se-card {
+    border-radius: 12px;
+  }
+  /* Table horizontal scroll — make wrapper scrollable */
+  .se-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+/* Ensure tables don't cause layout overflow */
+.se-table {
+  min-width: 0;
+}
+
+/* Touch-target minimum size for interactive elements */
+@media (max-width: 768px) {
+  button, .se-nav-item {
+    min-height: 36px;
+  }
+  /* Input fields — slightly larger touch target */
+  .se-input {
+    padding: 0.75rem 0.875rem;
+    font-size: 1rem; /* Prevents iOS zoom-in on focus */
+  }
 }

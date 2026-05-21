@@ -22,24 +22,23 @@ api.interceptors.request.use((config) => {
   return Promise.reject(error);
 });
 
-// Interceptor para desempaquetar la nueva estructura del backend ({ success, data, message })
+// Interceptor de respuesta: desempaqueta el wrapper { success, data, message } del backend.
+// Comportamiento: si la respuesta contiene { success: true, data: X }, response.data se reemplaza
+// por X directamente. Los consumidores acceden a resp.data (ya es la data interna).
+// Caso sin campo "data": la respuesta se deja intacta (ej: { success, qr, token }).
+// Si success === false, la respuesta no se modifica; el error se maneja en el catch del consumidor.
 api.interceptors.response.use(
   (response) => {
-    // Si el backend devuelve un wrapper con { success, data }, desempacamos la data
-    if (response.data && typeof response.data === 'object' && 'success' in response.data) {
-      if (response.data.success) {
-        // Caso 1: Respuesta con { success, data, message } - desempaquetar data
-        if ('data' in response.data) {
-          const responseData = response.data.data;
-          if (responseData && typeof responseData === 'object') {
-            responseData._message = response.data.message || response.data.mensaje;
-          }
-          // Si responseData es null/undefined, mantener el wrapper pero simplificado
-          response.data = responseData !== undefined ? responseData : { _message: response.data.message || response.data.mensaje };
-        }
-        // Caso 2: Respuesta con { success, mensaje, qr/tipo/etc } - mantener intacta
-        // (no modificar response.data, ya tiene la estructura correcta)
-      }
+    if (
+      response.data &&
+      typeof response.data === 'object' &&
+      'success' in response.data &&
+      response.data.success === true &&
+      'data' in response.data
+    ) {
+      // Unwrap: reemplazar el wrapper por la data interna.
+      // El mensaje queda descartado aquí; si se necesita, leer response.data antes del unwrap.
+      response.data = response.data.data;
     }
     return response;
   },

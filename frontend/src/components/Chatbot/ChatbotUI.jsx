@@ -70,16 +70,25 @@ const ChatbotUI = () => {
   };
 
   return (
-    <div className="fixed bottom-28 left-6 z-[100] flex flex-col items-start">
+    <div className="fixed bottom-[82px] left-[10px] z-[100] flex flex-col items-start">
       {isOpen && (
         <div className="mb-4 w-80 md:w-96 bg-white rounded-2xl shadow-2xl border border-slate-100 overflow-hidden flex flex-col h-[500px] animate-in slide-in-from-bottom-5 fade-in duration-300">
           {/* Header */}
-          <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 p-4 text-white flex justify-between items-center shadow-md">
+          <div style={{ background: 'linear-gradient(135deg, #0c1a2e 0%, #0a2540 100%)', borderBottom: '1px solid rgba(14,165,233,0.2)' }} className="p-4 text-white flex justify-between items-center">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                🤖
+              <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(14,165,233,0.15)', border: '1px solid rgba(14,165,233,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
               </div>
-              <h3 className="font-semibold text-sm drop-shadow-sm">Asistente Virtual IA</h3>
+              <div>
+                <h3 style={{ fontSize: '0.8rem', fontWeight: 700, color: '#F1F5F9', letterSpacing: '0.02em' }}>SafeEntry IA</h3>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', display: 'inline-block' }} />
+                  <span style={{ fontSize: '0.65rem', color: '#64748B' }}>En línea</span>
+                </div>
+              </div>
             </div>
             <button
               onClick={toggleChat}
@@ -155,15 +164,118 @@ const ChatbotUI = () => {
 
       {/* Floating Button */}
       {!isOpen && (
-        <button
-          onClick={toggleChat}
-          className="bg-indigo-600 hover:bg-indigo-700 text-white rounded-full p-4 shadow-xl border border-indigo-500/50 hover:scale-105 transition-transform animate-in fade-in zoom-in group"
-          aria-label="Abrir Asistente"
-        >
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="group-hover:animate-pulse">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-          </svg>
-        </button>
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <style>{`
+            @keyframes se-fab-pulse {
+              0% { transform: scale(1); opacity: 0.6; }
+              70% { transform: scale(1.9); opacity: 0; }
+              100% { transform: scale(1.9); opacity: 0; }
+            }
+            @keyframes se-fab-pulse2 {
+              0% { transform: scale(1); opacity: 0.35; }
+              70% { transform: scale(2.4); opacity: 0; }
+              100% { transform: scale(2.4); opacity: 0; }
+            }
+            .se-fab-ring1 {
+              position: absolute; inset: 0; border-radius: 50%;
+              background: rgba(14,165,233,0.35);
+              animation: se-fab-pulse 2s ease-out infinite;
+            }
+            .se-fab-ring2 {
+              position: absolute; inset: 0; border-radius: 50%;
+              background: rgba(14,165,233,0.18);
+              animation: se-fab-pulse2 2s ease-out infinite 0.4s;
+            }
+            .se-fab-btn {
+              position: relative; z-index: 1;
+              width: 68px; height: 68px; border-radius: 50%;
+              background: linear-gradient(135deg, #0c1a2e 0%, #0a2540 100%);
+              border: 1.5px solid rgba(14,165,233,0.5);
+              box-shadow: 0 0 20px rgba(14,165,233,0.3), 0 4px 16px rgba(0,0,0,0.4);
+              display: flex; align-items: center; justify-content: center;
+              cursor: pointer; transition: transform 0.2s, box-shadow 0.2s;
+              overflow: hidden;
+            }
+            .se-fab-btn::before {
+              content: '';
+              position: absolute; top: 0; left: -100%;
+              width: 60%; height: 100%;
+              background: linear-gradient(90deg, transparent, rgba(14,165,233,0.15), transparent);
+              animation: se-fab-shine 3s ease-in-out infinite;
+            }
+            @keyframes se-fab-shine {
+              0% { left: -100%; }
+              50% { left: 150%; }
+              100% { left: 150%; }
+            }
+            .se-fab-btn:hover {
+              transform: scale(1.08);
+              box-shadow: 0 0 28px rgba(14,165,233,0.5), 0 6px 20px rgba(0,0,0,0.5);
+            }
+          `}</style>
+          <div className="se-fab-ring2" />
+          <div className="se-fab-ring1" />
+          <button onClick={toggleChat} className="se-fab-btn" aria-label="Abrir Asistente IA SafeEntry">
+            <svg width="44" height="44" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <defs>
+                <radialGradient id="headGrad" cx="45%" cy="35%" r="60%">
+                  <stop offset="0%" stopColor="#ffffff"/>
+                  <stop offset="100%" stopColor="#bfdbfe"/>
+                </radialGradient>
+                <radialGradient id="eyeGrad" cx="35%" cy="30%" r="65%">
+                  <stop offset="0%" stopColor="#7dd3fc"/>
+                  <stop offset="100%" stopColor="#0369a1"/>
+                </radialGradient>
+                <radialGradient id="bodyGrad" cx="40%" cy="20%" r="70%">
+                  <stop offset="0%" stopColor="#e0f2fe"/>
+                  <stop offset="100%" stopColor="#93c5fd"/>
+                </radialGradient>
+                <filter id="glow">
+                  <feGaussianBlur stdDeviation="1.5" result="blur"/>
+                  <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+                </filter>
+              </defs>
+
+              {/* Antena base */}
+              <line x1="32" y1="5" x2="32" y2="12" stroke="#93c5fd" strokeWidth="2" strokeLinecap="round"/>
+              {/* Antena bola con glow */}
+              <circle cx="32" cy="4" r="3" fill="#0EA5E9" filter="url(#glow)"/>
+              <circle cx="32" cy="4" r="1.5" fill="white" opacity="0.8"/>
+
+              {/* Orejas */}
+              <rect x="10" y="19" width="5" height="8" rx="2.5" fill="url(#bodyGrad)" stroke="#60a5fa" strokeWidth="1"/>
+              <rect x="49" y="19" width="5" height="8" rx="2.5" fill="url(#bodyGrad)" stroke="#60a5fa" strokeWidth="1"/>
+
+              {/* Cabeza */}
+              <rect x="14" y="11" width="36" height="26" rx="10" fill="url(#headGrad)" stroke="#60a5fa" strokeWidth="1.2"/>
+              {/* Brillo cabeza */}
+              <ellipse cx="28" cy="16" rx="10" ry="4" fill="white" opacity="0.35"/>
+
+              {/* Ojo izquierdo */}
+              <circle cx="24" cy="24" r="6" fill="url(#eyeGrad)" stroke="#0284c7" strokeWidth="1"/>
+              <circle cx="24" cy="24" r="3.5" fill="#0EA5E9"/>
+              <circle cx="22.5" cy="22.5" r="1.2" fill="white" opacity="0.9"/>
+              <circle cx="25.5" cy="25.5" r="0.6" fill="white" opacity="0.5"/>
+
+              {/* Ojo derecho */}
+              <circle cx="40" cy="24" r="6" fill="url(#eyeGrad)" stroke="#0284c7" strokeWidth="1"/>
+              <circle cx="40" cy="24" r="3.5" fill="#0EA5E9"/>
+              <circle cx="38.5" cy="22.5" r="1.2" fill="white" opacity="0.9"/>
+              <circle cx="41.5" cy="25.5" r="0.6" fill="white" opacity="0.5"/>
+
+              {/* Boca sonriente */}
+              <path d="M26 33 Q32 38 38 33" stroke="#0369a1" strokeWidth="1.8" strokeLinecap="round" fill="none"/>
+
+              {/* Cuerpo */}
+              <rect x="19" y="40" width="26" height="16" rx="5" fill="url(#bodyGrad)" stroke="#60a5fa" strokeWidth="1.2"/>
+              {/* Pantallita pecho */}
+              <rect x="24" y="44" width="16" height="8" rx="3" fill="#0EA5E9" opacity="0.25"/>
+              {/* Líneas pantalla */}
+              <line x1="26" y1="47" x2="38" y2="47" stroke="#0EA5E9" strokeWidth="1" strokeLinecap="round" opacity="0.8"/>
+              <line x1="28" y1="50" x2="36" y2="50" stroke="#0EA5E9" strokeWidth="1" strokeLinecap="round" opacity="0.6"/>
+            </svg>
+          </button>
+        </div>
       )}
     </div>
   );

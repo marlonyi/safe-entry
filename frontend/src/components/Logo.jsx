@@ -28,14 +28,14 @@ export default function Logo({
   const sizes = {
     compact: { box: 'w-12 h-12', title: 'text-base', radius: 'rounded-xl' },
     default: { box: 'w-14 h-14', title: 'text-xl', radius: 'rounded-2xl' },
-    hero:    { box: 'w-44 h-44', title: 'text-5xl', radius: 'rounded-3xl' }
+    hero:    { box: 'w-72 h-44', title: 'text-5xl', radius: 'rounded-3xl' }
   };
   const s = sizes[variant];
 
   // Contenedor del icono: glassmorphism segun tema
   const containerBase = `${s.box} ${s.radius} shrink-0 relative overflow-hidden flex items-center justify-center backdrop-blur-sm`;
   const containerLight = 'bg-gradient-to-br from-white via-blue-50 to-indigo-50 ring-1 ring-blue-200/60 shadow-lg shadow-blue-500/10';
-  const containerDark  = 'bg-gradient-to-br from-white/10 via-blue-500/5 to-transparent ring-1 ring-white/15 shadow-lg shadow-black/20';
+  const containerDark  = 'bg-transparent ring-1 ring-white/8 shadow-md shadow-black/40';
   const containerClass = `${containerBase} ${isDark ? containerDark : containerLight}`;
 
   const Icon = (
@@ -45,13 +45,15 @@ export default function Logo({
 
       {/* Caja con la imagen */}
       <div className={`relative ${containerClass}`}>
-        {/* Brillo diagonal sutil */}
-        <div className={`absolute -inset-x-2 -top-2 h-1/2 bg-gradient-to-b ${isDark ? 'from-white/10' : 'from-white/60'} to-transparent rounded-t-2xl pointer-events-none`} />
+        {isDark ? null : (
+          <div className={`absolute -inset-x-2 -top-2 h-1/2 bg-gradient-to-b from-white/60 to-transparent rounded-t-2xl pointer-events-none`} />
+        )}
 
         <img
           src="/safeentry-logo.png"
           alt="SafeEntry"
-          className={`relative w-full h-full object-contain ${variant === 'hero' ? 'p-3' : 'p-1.5'} drop-shadow-sm transition-transform duration-300 group-hover:scale-105`}
+          className={`relative w-full object-contain transition-transform duration-300 group-hover:scale-105`}
+          style={variant === 'hero' ? { height: '80%', marginTop: '14%', marginBottom: '6%', padding: '0 8px' } : { height: '100%', padding: '6px' }}
           onError={(e) => {
             e.currentTarget.style.display = 'none';
             e.currentTarget.parentElement.innerHTML = `
@@ -60,8 +62,9 @@ export default function Logo({
           }}
         />
 
-        {/* Borde luminoso interior */}
-        <div className={`absolute inset-0 ${s.radius} ring-1 ${isDark ? 'ring-inset ring-white/10' : 'ring-inset ring-white/40'} pointer-events-none`} />
+        {!isDark && (
+          <div className={`absolute inset-0 ${s.radius} ring-1 ring-inset ring-white/40 pointer-events-none`} />
+        )}
       </div>
     </div>
   );

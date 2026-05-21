@@ -1,9 +1,16 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Shield, ArrowLeft, KeyRound, UserCheck, QrCode, Clock, CheckCircle2, AlertCircle, Fingerprint } from 'lucide-react';
+import { Shield, ArrowLeft, KeyRound, UserCheck, QrCode, Clock, CheckCircle2, AlertCircle, Fingerprint, Wifi } from 'lucide-react';
+import Logo from '../components/Logo';
 import { QRCodeSVG } from 'qrcode.react';
 import axios from 'axios';
 
-const API_BASE = 'http://localhost:5000/api';
+const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+const PANEL_STATS = [
+  { value: '99.8%', label: 'Uptime SLA' },
+  { value: 'AES-256', label: 'Cifrado en tránsito' },
+  { value: '< 1s', label: 'Tiempo de respuesta' },
+];
 
 export default function VisitanteAcceso({ onBack }) {
   const [step, setStep] = useState('form'); // 'form' | 'success'
@@ -13,7 +20,18 @@ export default function VisitanteAcceso({ onBack }) {
   const [error, setError] = useState('');
   const [resultado, setResultado] = useState(null);
 
+  const [currentTime, setCurrentTime] = useState('');
   const inputRefs = useRef([]);
+
+  useEffect(() => {
+    const tick = () => {
+      const now = new Date();
+      setCurrentTime(now.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }));
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (step === 'form' && inputRefs.current[0]) {
@@ -72,77 +90,97 @@ export default function VisitanteAcceso({ onBack }) {
 
   /* ─── FORM ─── */
   const renderForm = () => (
-    <div className="min-h-screen flex items-center justify-center p-4 se-fade-in"
-      style={{ background: 'var(--se-bg)', position: 'relative', overflow: 'hidden' }}>
+    <div className="h-screen flex flex-col lg:flex-row overflow-hidden se-fade-in"
+      style={{ background: 'var(--se-surface)' }}>
 
-      {/* Fondo decorativo */}
-      <div style={{
-        position: 'absolute', inset: 0, pointerEvents: 'none',
-        background: 'radial-gradient(ellipse 70% 50% at 50% -10%, rgba(14,165,233,0.12) 0%, transparent 70%)',
-      }} />
+      {/* Panel izquierdo oscuro — igual al Login (solo lg+) */}
+      <div
+        className="hidden lg:flex flex-1 flex-col relative overflow-hidden"
+        style={{ background: 'var(--se-panel-bg)' }}
+        aria-hidden="true"
+      >
+        {/* Architectural grid */}
+        <div className="se-grid-overlay absolute inset-0" />
 
-      {/* Panel izquierdo oscuro — decorativo (solo md+) */}
-      <div className="hidden md:block" style={{
-        position: 'fixed', left: 0, top: 0, bottom: 0, width: '38%',
-        background: 'var(--se-panel-bg)',
-        borderRight: '1px solid var(--se-panel-border)',
-        zIndex: 0,
-      }}>
-        {/* Scan line */}
-        <div className="se-scanline" style={{
-          position: 'absolute', left: 0, right: 0, height: 2,
-          background: 'linear-gradient(90deg, transparent, var(--se-accent), transparent)',
-          opacity: 0.5,
-        }} />
-        {/* Decorative grid */}
-        <div style={{
-          position: 'absolute', inset: 0, opacity: 0.04,
-          backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 40px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 40px)',
-        }} />
-        {/* Shield mark */}
-        <div style={{
-          position: 'absolute', bottom: '8%', left: '50%', transform: 'translateX(-50%)',
-          opacity: 0.04,
-        }}>
-          <Shield size={220} color="#fff" />
-        </div>
+        {/* Scanline sweep */}
+        <div
+          className="se-scanline absolute inset-x-0 pointer-events-none z-10"
+          style={{
+            height: '2px',
+            background: 'linear-gradient(90deg, transparent 0%, rgba(14,165,233,0.5) 40%, rgba(14,165,233,0.8) 50%, rgba(14,165,233,0.5) 60%, transparent 100%)',
+            boxShadow: '0 0 16px 4px rgba(14,165,233,0.25)',
+          }}
+        />
 
-        {/* Brand text */}
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center' }}>
-          <div style={{
-            width: 64, height: 64,
-            borderRadius: 16,
-            background: 'rgba(14,165,233,0.15)',
-            border: '1px solid rgba(14,165,233,0.3)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            margin: '0 auto 1rem',
-          }}>
-            <Shield size={30} color="var(--se-accent)" />
+        {/* Ambient glow blobs */}
+        <div style={{ position: 'absolute', top: '-10%', right: '-10%', width: '480px', height: '480px', background: 'radial-gradient(circle, rgba(14,165,233,0.08) 0%, transparent 65%)', pointerEvents: 'none' }} />
+        <div style={{ position: 'absolute', bottom: '-8%', left: '-8%', width: '380px', height: '380px', background: 'radial-gradient(circle, rgba(99,102,241,0.07) 0%, transparent 65%)', pointerEvents: 'none' }} />
+
+        {/* Corner brackets */}
+        <div className="se-corner-tl" />
+        <div className="se-corner-br" />
+
+        {/* Content */}
+        <div className="relative z-10 flex flex-col h-full p-11 pb-16">
+
+          {/* Top status bar */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '48px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="se-blink" style={{ width: '7px', height: '7px', borderRadius: '50%', background: '#10B981', display: 'inline-block', flexShrink: 0 }} />
+              <span style={{ fontSize: '0.7rem', color: '#94A3B8', fontWeight: 500, letterSpacing: '0.05em', textTransform: 'uppercase' }}>Sistema en línea</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+              <Wifi size={11} style={{ color: '#64748B' }} />
+              <span style={{ fontFamily: "'DM Sans', monospace", fontSize: '0.72rem', color: '#94A3B8', letterSpacing: '0.05em' }}>{currentTime}</span>
+            </div>
           </div>
-          <p className="se-heading" style={{ color: '#F1F5F9', fontSize: '1.25rem', fontWeight: 700, marginBottom: 4 }}>
-            SafeEntry
-          </p>
-          <p style={{ color: '#475569', fontSize: '0.75rem', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
-            Control de Acceso
-          </p>
+
+          {/* Radar + logo hero */}
+          <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '44px', height: '200px' }}>
+            {[0, 1, 2].map((i) => (
+              <div key={i} className="se-radar-ring" style={{ position: 'absolute', width: '160px', height: '160px', borderRadius: '50%', border: '1.5px solid rgba(14,165,233,0.45)', animationDelay: `${i * 1.05}s` }} />
+            ))}
+            <div className="se-arc-spin" style={{ position: 'absolute', width: '190px', height: '190px', borderRadius: '50%', border: '1px dashed rgba(14,165,233,0.18)' }} />
+            <div className="se-arc-spin-rev" style={{ position: 'absolute', width: '130px', height: '130px', borderRadius: '50%', border: '1px dashed rgba(99,102,241,0.20)' }} />
+            <div style={{ position: 'relative', zIndex: 2 }}>
+              <Logo variant="hero" theme="dark" subtitle={null} />
+            </div>
+          </div>
+
+          {/* Headline */}
+          <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+            <h2 className="se-heading" style={{ fontSize: '2rem', fontWeight: 800, color: '#fff', letterSpacing: '-0.025em', lineHeight: 1.2, marginBottom: '12px' }}>
+              Acceso seguro<br />
+              <span style={{ background: 'linear-gradient(90deg, #0EA5E9, #818CF8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' }}>
+                para visitantes.
+              </span>
+            </h2>
+            <p style={{ fontSize: '0.8125rem', color: '#94A3B8', lineHeight: 1.65, maxWidth: '320px', margin: '0 auto', fontWeight: 300 }}>
+              Ingresa con el código de 6 dígitos que te compartió el residente para validar tu acceso al conjunto.
+            </p>
+          </div>
+
+          {/* Stats row */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', marginBottom: '32px' }}>
+            {PANEL_STATS.map((s) => (
+              <div key={s.label} style={{ textAlign: 'center', padding: '14px 8px', background: 'rgba(255,255,255,0.025)', border: '1px solid rgba(14,165,233,0.09)', borderRadius: '10px', backdropFilter: 'blur(4px)' }}>
+                <p className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: '#0EA5E9', letterSpacing: '-0.02em', marginBottom: '3px' }}>{s.value}</p>
+                <p style={{ fontSize: '0.65rem', color: '#64748B', fontWeight: 500, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{s.label}</p>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ flex: 1 }} />
         </div>
       </div>
 
-      {/* Card central */}
-      <div className="se-slide-up" style={{
-        position: 'relative', zIndex: 1,
-        background: 'var(--se-surface)',
-        borderRadius: 20,
-        boxShadow: '0 24px 80px rgba(0,0,0,0.12)',
-        border: '1px solid var(--se-border)',
-        width: '100%', maxWidth: 440,
-        overflow: 'hidden',
-      }}>
+      {/* Panel derecho — formulario */}
+      <div className="w-full lg:w-[46%] flex flex-col justify-between p-5 sm:p-8 lg:p-12 relative overflow-y-auto se-slide-up"
+        style={{ background: 'var(--se-surface)' }}>
         {/* Accent top bar */}
-        <div style={{ height: 3, background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
+        <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 3, background: 'linear-gradient(90deg, #0EA5E9, #6366F1)' }} />
 
-        {/* Card header */}
-        <div style={{ padding: '1.75rem 1.75rem 1.25rem' }}>
+        <div className="flex-1 flex flex-col justify-center" style={{ maxWidth: 480, margin: '0 auto', width: '100%' }}>
           <button
             type="button"
             onClick={onBack}
@@ -151,7 +189,7 @@ export default function VisitanteAcceso({ onBack }) {
               fontSize: '0.8rem', fontWeight: 600,
               color: 'var(--se-text-muted)',
               background: 'none', border: 'none', cursor: 'pointer',
-              marginBottom: '1.25rem',
+              marginBottom: '1.75rem',
               transition: 'color 0.15s',
             }}
             onMouseEnter={e => e.currentTarget.style.color = 'var(--se-accent)'}
@@ -179,10 +217,9 @@ export default function VisitanteAcceso({ onBack }) {
               </p>
             </div>
           </div>
-        </div>
 
-        {/* Form body */}
-        <form onSubmit={handleSubmit} style={{ padding: '0 1.75rem 1.75rem' }}>
+          {/* Form body */}
+          <form onSubmit={handleSubmit} style={{ marginTop: '1.5rem' }}>
 
           {/* Info hint */}
           <div style={{
@@ -250,7 +287,7 @@ export default function VisitanteAcceso({ onBack }) {
             }}>
               Código de Acceso
             </label>
-            <div style={{ display: 'flex', gap: 8, justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: 'clamp(4px, 2vw, 10px)', justifyContent: 'space-between' }}>
               {codigo.map((digit, i) => (
                 <input
                   key={i}
@@ -263,7 +300,7 @@ export default function VisitanteAcceso({ onBack }) {
                   onKeyDown={(e) => handleKeyDown(i, e)}
                   onFocus={(e) => e.target.select()}
                   style={{
-                    width: 44, height: 52,
+                    flex: 1, minWidth: 0, height: 52,
                     textAlign: 'center',
                     fontSize: '1.375rem', fontWeight: 800,
                     background: digit ? 'var(--se-accent-dim)' : 'var(--se-bg)',
@@ -307,7 +344,8 @@ export default function VisitanteAcceso({ onBack }) {
               </>
             )}
           </button>
-        </form>
+          </form>
+        </div>
       </div>
     </div>
   );
@@ -363,7 +401,7 @@ export default function VisitanteAcceso({ onBack }) {
           </div>
 
           {/* QR content */}
-          <div style={{ padding: '1.5rem 1.75rem 1.75rem' }}>
+          <div style={{ padding: 'clamp(1rem, 3vw, 1.5rem) clamp(1rem, 4vw, 1.75rem) clamp(1rem, 4vw, 1.75rem)' }}>
 
             {/* Info visitante */}
             <div style={{
@@ -401,7 +439,7 @@ export default function VisitanteAcceso({ onBack }) {
               }}>
                 <QRCodeSVG
                   value={qrUrl}
-                  size={190}
+                  size={typeof window !== 'undefined' && window.innerWidth < 380 ? 150 : 190}
                   level="H"
                   includeMargin={true}
                   fgColor="#0F1923"
@@ -438,7 +476,7 @@ export default function VisitanteAcceso({ onBack }) {
             </div>
 
             {/* Acciones */}
-            <div style={{ display: 'flex', gap: 10 }}>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <button
                 onClick={() => {
                   setStep('form');

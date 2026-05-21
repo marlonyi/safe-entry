@@ -271,20 +271,15 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
               LEFT — Form panel
           ════════════════════════════════════ */}
           <div
-            className="w-full lg:w-[46%] flex flex-col justify-between p-8 sm:p-10 lg:p-12 relative overflow-y-auto"
+            className="w-full lg:w-[46%] flex flex-col justify-between p-5 sm:p-8 lg:p-12 relative overflow-y-auto"
             style={{ background: 'var(--se-surface)' }}
           >
-            {/* Top logo */}
-            <div className="se-slide-up se-delay-1 mb-8">
-              <Logo variant="default" theme="light" subtitle="Sistema de Control de Acceso" />
-            </div>
-
             {/* Form content */}
             <div className="flex-1 flex flex-col justify-center">
               {/* Heading */}
-              <div className="mb-8 se-slide-up se-delay-2">
+              <div className="mb-5 sm:mb-8 se-slide-up se-delay-2">
                 <h1
-                  className="se-heading text-[1.85rem] font-bold leading-tight mb-1.5"
+                  className="se-heading text-[1.4rem] sm:text-[1.85rem] font-bold leading-tight mb-1.5"
                   style={{ color: 'var(--se-text-primary)', letterSpacing: '-0.02em' }}
                 >
                   Bienvenido de nuevo
@@ -553,7 +548,7 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
 
             {/* Visitor CTA at bottom */}
             <div
-              className="se-slide-up se-delay-7 mt-8 pt-6"
+              className="se-slide-up se-delay-7 mt-5 pt-5 sm:mt-8 sm:pt-6"
               style={{ borderTop: '1px solid var(--se-border)' }}
             >
               <p
@@ -586,6 +581,21 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
                 Ingresar como Visitante
                 <ArrowRight size={13} style={{ color: '#D97706', marginLeft: 'auto' }} aria-hidden="true" />
               </button>
+            </div>
+
+            {/* Footer — visible en el panel del formulario */}
+            <div className="flex lg:hidden items-center justify-between" style={{ paddingTop: '16px', borderTop: '1px solid var(--se-border)', marginTop: '1.5rem' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+                © {new Date().getFullYear()} SafeEntry
+              </span>
+              <div style={{ display: 'flex', gap: '16px' }}>
+                {['Soporte', 'Términos', 'Privacidad'].map((l) => (
+                  <a key={l} href="#" style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)', fontWeight: 400, textDecoration: 'none', transition: 'color 0.15s' }}
+                    onMouseEnter={(e) => (e.target.style.color = 'var(--se-text-primary)')}
+                    onMouseLeave={(e) => (e.target.style.color = 'var(--se-text-muted)')}
+                  >{l}</a>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -633,13 +643,13 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
             <div className="se-corner-br" />
 
             {/* ── Content ── */}
-            <div className="relative z-10 flex flex-col h-full p-11">
+            <div className="relative z-10 flex flex-col h-full p-11 overflow-y-auto">
 
               {/* Top status bar */}
               <div
                 style={{
                   display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                  marginBottom: '48px',
+                  marginBottom: '28px',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
@@ -660,7 +670,7 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
               </div>
 
               {/* Radar / logo hero section */}
-              <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '44px', height: '200px' }}>
+              <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', alignItems: 'center', marginBottom: '24px', height: '180px' }}>
 
                 {/* Radar pulse rings */}
                 {[0, 1, 2].map((i) => (
@@ -705,7 +715,7 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
               </div>
 
               {/* Headline */}
-              <div style={{ textAlign: 'center', marginBottom: '36px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
                 <h2
                   className="se-heading"
                   style={{
@@ -741,7 +751,7 @@ export default function Login({ onLoginSuccess, onVisitanteAcceso }) {
               <div
                 style={{
                   display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)',
-                  gap: '10px', marginBottom: '32px',
+                  gap: '10px', marginBottom: '20px',
                 }}
               >
                 {PANEL_STATS.map((s) => (

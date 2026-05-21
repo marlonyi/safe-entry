@@ -1,10 +1,23 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Users, Car, KeyRound, Plus, Shield, X, Clock, ArrowRightCircle, UserCheck, Activity, MapPin } from 'lucide-react';
+import { Home, Users, Car, KeyRound, Plus, Shield, X, Clock, ArrowRightCircle, UserCheck, Activity, MapPin, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
 import api from '../services/api';
 import Logo from '../components/Logo';
+import { useToast } from '../components/ui/Toast';
 
 export default function ResidenteDashboard({ user }) {
+  const { showToast, ToastContainer } = useToast();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [view, setView] = useState('home');
+
+  /* Track desktop breakpoint for sidebar offset */
+  const [isDesktop, setIsDesktop] = useState(() => window.innerWidth >= 768);
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const handler = (e) => setIsDesktop(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
   const [visitantes, setVisitantes] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -143,7 +156,7 @@ export default function ResidenteDashboard({ user }) {
       const resp = await api.get(`/visitantes/${visitante._id || visitante.id}/codigo-actual`);
       setCodigoDinamico(resp.data);
     } catch (error) {
-      alert('Error al obtener código de acceso: ' + (error.response?.data?.error || error.message));
+      showToast('Error al obtener código de acceso: ' + (error.response?.data?.error || error.message), 'error');
       setShowCodigoModal(false);
     } finally {
       setLoadingCodigo(false);
@@ -184,7 +197,7 @@ export default function ResidenteDashboard({ user }) {
           borderRadius: 18,
           background: 'var(--se-panel-bg)',
           border: '1px solid var(--se-panel-border)',
-          padding: '1.75rem',
+          padding: 'clamp(1rem, 4vw, 1.75rem)',
           position: 'relative',
           overflow: 'hidden',
         }}>
@@ -199,7 +212,7 @@ export default function ResidenteDashboard({ user }) {
             <Shield size={160} color="#fff" />
           </div>
           <div style={{ position: 'relative', zIndex: 1 }}>
-            <h2 className="se-heading" style={{ fontSize: '1.375rem', fontWeight: 800, color: '#F1F5F9', marginBottom: 6 }}>
+            <h2 className="se-heading" style={{ fontSize: 'clamp(1.1rem, 4vw, 1.375rem)', fontWeight: 800, color: '#F1F5F9', marginBottom: 6 }}>
               Nuevo Visitante
             </h2>
             <p style={{ fontSize: '0.875rem', color: '#64748B', marginBottom: '1.25rem', maxWidth: 400 }}>
@@ -221,7 +234,7 @@ export default function ResidenteDashboard({ user }) {
         </div>
 
         {/* Stats grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
           {cards.map((c, i) => (
             <div key={i} className="se-card se-slide-up" style={{ borderRadius: 14, padding: '1.25rem', animationDelay: `${i * 0.07}s` }}>
               <div style={{
@@ -232,7 +245,7 @@ export default function ResidenteDashboard({ user }) {
               }}>
                 <c.icon size={20} style={{ color: c.accentColor }} />
               </div>
-              <p className="se-heading" style={{ fontSize: '1.75rem', fontWeight: 800, color: 'var(--se-text-primary)', lineHeight: 1 }}>
+              <p className="se-heading" style={{ fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', fontWeight: 800, color: 'var(--se-text-primary)', lineHeight: 1 }}>
                 {c.value}
               </p>
               <p style={{ fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-muted)', marginTop: 4 }}>
@@ -242,7 +255,7 @@ export default function ResidenteDashboard({ user }) {
           ))}
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
           {/* Mi vehículo / parqueadero */}
           <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
@@ -281,7 +294,7 @@ export default function ResidenteDashboard({ user }) {
                       <MapPin size={17} style={{ color: '#10B981' }} />
                       <div>
                         <p style={{ fontSize: '0.65rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#10B981' }}>Parqueadero Asignado</p>
-                        <p className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>{parqueaderoInfo.numero}</p>
+                        <p className="se-heading" style={{ fontSize: 'clamp(0.9rem, 4vw, 1.1rem)', fontWeight: 800, color: 'var(--se-text-primary)' }}>{parqueaderoInfo.numero}</p>
                       </div>
                     </div>
                   )}
@@ -387,7 +400,7 @@ export default function ResidenteDashboard({ user }) {
         {/* Accent bar */}
         <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
 
-        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           <div>
             <h2 className="se-heading" style={{ fontSize: '1.125rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
               Mis Visitantes / Autorizaciones
@@ -413,9 +426,9 @@ export default function ResidenteDashboard({ user }) {
                 <thead>
                   <tr>
                     <th style={{ textAlign: 'left' }}>Nombre</th>
-                    <th style={{ textAlign: 'left' }}>Cédula</th>
+                    <th className="hidden sm:table-cell" style={{ textAlign: 'left' }}>Cédula</th>
                     <th style={{ textAlign: 'left' }}>Placa</th>
-                    <th style={{ textAlign: 'left' }}>Motivo</th>
+                    <th className="hidden md:table-cell" style={{ textAlign: 'left' }}>Motivo</th>
                     <th style={{ textAlign: 'left' }}>Estado</th>
                     <th style={{ textAlign: 'left' }}>Acciones</th>
                   </tr>
@@ -434,13 +447,13 @@ export default function ResidenteDashboard({ user }) {
                         <td style={{ fontWeight: 600, color: 'var(--se-text-primary)' }}>
                           {v.nombreVisitante || v.nombre} {v.apellidoVisitante || v.apellido}
                         </td>
-                        <td style={{ color: 'var(--se-text-secondary)' }}>{v.cedulaVisitante || v.cedula}</td>
+                        <td className="hidden sm:table-cell" style={{ color: 'var(--se-text-secondary)' }}>{v.cedulaVisitante || v.cedula}</td>
                         <td>
                           <span style={{ fontFamily: 'monospace', fontSize: '0.8rem', fontWeight: 700, color: 'var(--se-text-primary)', background: 'var(--se-bg)', padding: '2px 8px', borderRadius: 6, border: '1px solid var(--se-border)' }}>
                             {v.placaVisitante || v.placaVehiculo || '—'}
                           </span>
                         </td>
-                        <td style={{ color: 'var(--se-text-muted)', fontSize: '0.8rem' }}>{v.motivoVisita || '—'}</td>
+                        <td className="hidden md:table-cell" style={{ color: 'var(--se-text-muted)', fontSize: '0.8rem' }}>{v.motivoVisita || '—'}</td>
                         <td>
                           <span className="se-badge" style={{ background: badge.bg, color: badge.color }}>{badge.label}</span>
                         </td>
@@ -497,7 +510,7 @@ export default function ResidenteDashboard({ user }) {
         )}
 
         <form onSubmit={handleCrearVisitante} className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label style={{ display: 'block', marginBottom: 5, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>Nombre</label>
               <input required value={nuevoVisitante.nombre} onChange={e => setNuevoVisitante({...nuevoVisitante, nombre: e.target.value})} className="se-input" />
@@ -574,7 +587,7 @@ export default function ResidenteDashboard({ user }) {
           </div>
 
           {tieneVehiculo && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 se-fade-in">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 se-fade-in">
               <div>
                 <label style={{ display: 'block', marginBottom: 6, fontSize: '0.7rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', color: 'var(--se-text-secondary)' }}>
                   Placa Principal
@@ -626,55 +639,67 @@ export default function ResidenteDashboard({ user }) {
     </div>
   );
 
-  /* ── MAIN LAYOUT ── */
-  return (
-    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--se-bg)' }}>
+  /* ── SHARED SIDEBAR CONTENT ── */
+  const renderSidebarContent = (onNavClick, collapsed = false) => (
+    <>
+      <div style={{
+        position: 'absolute', inset: 0, opacity: 0.03,
+        backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)',
+        pointerEvents: 'none',
+      }} />
 
-      {/* Sidebar */}
-      <aside className="hidden md:flex flex-col" style={{
-        width: 250, flexShrink: 0,
-        position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
-        background: 'var(--se-panel-bg)',
-        borderRight: '1px solid var(--se-panel-border)',
-        overflow: 'hidden',
-      }}>
-        {/* Subtle grid bg */}
-        <div style={{
-          position: 'absolute', inset: 0, opacity: 0.03,
-          backgroundImage: 'repeating-linear-gradient(0deg,#fff 0,#fff 1px,transparent 1px,transparent 32px),repeating-linear-gradient(90deg,#fff 0,#fff 1px,transparent 1px,transparent 32px)',
-          pointerEvents: 'none',
-        }} />
-
-        {/* Logo */}
-        <div style={{ padding: '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative' }}>
+      {/* Logo area */}
+      <div style={{ padding: collapsed ? '1.25rem 0' : '1.5rem', borderBottom: '1px solid var(--se-panel-border)', position: 'relative', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'flex-start' }}>
+        {collapsed ? (
+          <Home size={22} style={{ color: 'var(--se-accent)' }} />
+        ) : (
           <Logo theme="dark" subtitle="Panel Residente" />
-        </div>
+        )}
+      </div>
 
-        {/* Nav */}
-        <nav style={{ flex: 1, padding: '1rem 0.75rem', position: 'relative' }}>
-          {navItems.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setView(item.id)}
-              className={`se-nav-item ${view === item.id ? 'active' : ''}`}
-              style={{ marginBottom: 4 }}
-            >
-              {view === item.id && (
-                <div style={{
-                  position: 'absolute', left: 0,
-                  width: 3, height: 28,
-                  background: 'var(--se-accent)',
-                  borderRadius: '0 4px 4px 0',
-                }} />
-              )}
-              <item.icon size={19} className="se-nav-icon" />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
+      {/* Nav items */}
+      <nav style={{ flex: 1, padding: collapsed ? '1rem 0' : '1rem 0.75rem', position: 'relative' }}>
+        {navItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => { setView(item.id); onNavClick(); }}
+            title={collapsed ? item.label : undefined}
+            className={`se-nav-item ${view === item.id ? 'active' : ''}`}
+            style={{
+              marginBottom: 4,
+              position: 'relative',
+              justifyContent: collapsed ? 'center' : 'flex-start',
+              padding: collapsed ? '0.625rem 0' : undefined,
+            }}
+          >
+            {view === item.id && (
+              <div style={{
+                position: 'absolute', left: 0,
+                width: 3, height: 28,
+                background: 'var(--se-accent)',
+                borderRadius: '0 4px 4px 0',
+              }} />
+            )}
+            <item.icon size={19} className="se-nav-icon" style={{ flexShrink: 0 }} />
+            {!collapsed && <span>{item.label}</span>}
+          </button>
+        ))}
+      </nav>
 
-        {/* User card */}
-        <div style={{ padding: '1rem', borderTop: '1px solid var(--se-panel-border)', position: 'relative' }}>
+      {/* User card */}
+      <div style={{ padding: collapsed ? '1rem 0' : '1rem', borderTop: '1px solid var(--se-panel-border)', position: 'relative' }}>
+        {collapsed ? (
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <div style={{
+              width: 36, height: 36, borderRadius: 10,
+              background: 'linear-gradient(135deg, #10B981, #0EA5E9)',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontSize: '0.9rem', fontWeight: 800, color: '#fff',
+            }}>
+              {user?.nombre?.charAt(0) || 'R'}
+            </div>
+          </div>
+        ) : (
           <div className="se-user-card">
             <div style={{
               width: 38, height: 38, borderRadius: 10, flexShrink: 0,
@@ -694,24 +719,120 @@ export default function ResidenteDashboard({ user }) {
               </p>
             </div>
           </div>
-        </div>
+        )}
+      </div>
+    </>
+  );
+
+  /* ── MAIN LAYOUT ── */
+  const desktopWidth = sidebarCollapsed ? 64 : 250;
+
+  return (
+    <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--se-bg)' }}>
+
+      {/* Sidebar — desktop */}
+      <aside
+        className="hidden md:flex flex-col"
+        style={{
+          width: desktopWidth,
+          flexShrink: 0,
+          position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 20,
+          background: 'var(--se-panel-bg)',
+          borderRight: '1px solid var(--se-panel-border)',
+          overflow: 'hidden',
+          transition: 'width 0.3s ease-in-out',
+        }}
+      >
+        {/* Desktop toggle button */}
+        <button
+          onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          title={sidebarCollapsed ? 'Expandir menú' : 'Colapsar menú'}
+          style={{
+            position: 'absolute', right: -12, top: 72, zIndex: 30,
+            width: 24, height: 24,
+            background: 'var(--se-panel-bg)',
+            border: '1px solid var(--se-panel-border)',
+            borderRadius: '50%',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            transition: 'box-shadow 0.15s',
+            color: 'var(--se-text-secondary)',
+          }}
+          onMouseEnter={e => e.currentTarget.style.boxShadow = '0 4px 10px rgba(0,0,0,0.25)'}
+          onMouseLeave={e => e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.15)'}
+        >
+          {sidebarCollapsed ? <ChevronRight size={13} /> : <ChevronLeft size={13} />}
+        </button>
+
+        {renderSidebarContent(() => {}, sidebarCollapsed)}
+      </aside>
+
+      {/* Mobile sidebar overlay */}
+      {sidebarOpen && (
+        <div
+          className="md:hidden"
+          style={{
+            position: 'fixed', inset: 0, zIndex: 40,
+            background: 'rgba(8,13,20,0.65)',
+            backdropFilter: 'blur(4px)',
+          }}
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Mobile sidebar drawer — always expanded */}
+      <aside
+        className="md:hidden flex flex-col"
+        style={{
+          width: 250, flexShrink: 0,
+          position: 'fixed', top: 0, bottom: 0, left: 0, zIndex: 50,
+          background: 'var(--se-panel-bg)',
+          borderRight: '1px solid var(--se-panel-border)',
+          overflow: 'hidden',
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.28s cubic-bezier(0.4,0,0.2,1)',
+        }}
+      >
+        {renderSidebarContent(() => setSidebarOpen(false), false)}
       </aside>
 
       {/* Main content */}
-      <main style={{ flex: 1, marginLeft: 250, padding: '2rem', minWidth: 0 }}>
+      <main
+        style={{
+          flex: 1, minWidth: 0,
+          marginLeft: isDesktop ? desktopWidth : 0,
+          transition: 'margin-left 0.3s ease-in-out',
+        }}
+        className="p-4 md:p-8"
+      >
 
         {/* Header */}
         <header className="se-card" style={{
           borderRadius: 14, overflow: 'hidden',
-          marginBottom: '2rem',
+          marginBottom: '1.25rem',
         }}>
           <div style={{ height: 3, background: 'linear-gradient(90deg, #10B981, #0EA5E9)' }} />
-          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '1rem', padding: '1rem 1.25rem' }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem', padding: '0.75rem 1rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* Mobile hamburger */}
+              <button
+                className="md:hidden"
+                onClick={() => setSidebarOpen(true)}
+                style={{
+                  width: 38, height: 38, borderRadius: 10,
+                  background: 'var(--se-bg)', border: '1px solid var(--se-border)',
+                  color: 'var(--se-text-secondary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  cursor: 'pointer', flexShrink: 0,
+                }}
+              >
+                <Menu size={18} />
+              </button>
               <img
                 src={`https://ui-avatars.com/api/?name=${encodeURIComponent(user?.nombre || 'User')}&background=10b981&color=fff&bold=true`}
                 alt="Profile"
-                style={{ width: 46, height: 46, borderRadius: '50%', border: '2px solid var(--se-border)' }}
+                className="hidden sm:block" style={{ width: 46, height: 46, borderRadius: '50%', border: '2px solid var(--se-border)' }}
               />
               <div>
                 <h1 className="se-heading" style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--se-text-primary)' }}>
@@ -749,16 +870,19 @@ export default function ResidenteDashboard({ user }) {
         {view === 'vehiculo'  && renderVehiculo()}
       </main>
 
+      {/* Global: Toasts */}
+      <ToastContainer />
+
       {/* Modal Código de Acceso */}
       {showCodigoModal && selectedVisitante && (
         <div style={{
           position: 'fixed', inset: 0, zIndex: 50,
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          padding: '1rem',
+          padding: '0.75rem',
           background: 'rgba(8,13,20,0.75)',
           backdropFilter: 'blur(8px)',
         }}>
-          <div className="se-slide-up se-card" style={{ borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 400 }}>
+          <div className="se-slide-up se-card" style={{ borderRadius: 20, overflow: 'hidden', width: '100%', maxWidth: 400, maxHeight: '95vh', overflowY: 'auto' }}>
             {/* Modal header */}
             <div style={{ background: 'var(--se-panel-bg)', borderBottom: '1px solid var(--se-panel-border)', padding: '1.25rem 1.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -781,7 +905,7 @@ export default function ResidenteDashboard({ user }) {
             </div>
 
             {/* Modal body */}
-            <div style={{ padding: '1.5rem' }}>
+            <div style={{ padding: 'clamp(1rem, 4vw, 1.5rem)' }}>
               {loadingCodigo ? (
                 <div style={{ textAlign: 'center', padding: '2.5rem 0' }}>
                   <div style={{ width: 40, height: 40, border: '3px solid var(--se-border)', borderTopColor: 'var(--se-accent)', borderRadius: '50%', margin: '0 auto 12px', animation: 'se-arc-spin 0.8s linear infinite' }} />
@@ -803,7 +927,7 @@ export default function ResidenteDashboard({ user }) {
                     <div style={{ display: 'flex', justifyContent: 'center', gap: 8 }}>
                       {codigoDinamico.codigo.split('').map((digit, i) => (
                         <span key={i} style={{
-                          width: 42, height: 50, borderRadius: 10,
+                          flex: 1, minWidth: 0, maxWidth: 46, height: 50, borderRadius: 10,
                           background: '#fff',
                           border: '2px solid rgba(245,158,11,0.4)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center',
