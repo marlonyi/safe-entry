@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, UserCheck, MonitorPlay, Car, AlertTriangle, ArrowRightCircle, Clock, QrCode, Menu, ChevronLeft, ChevronRight } from 'lucide-react';
+import { ShieldCheck, UserCheck, MonitorPlay, Car, AlertTriangle, ArrowRightCircle, Clock, QrCode, Menu, ChevronLeft, ChevronRight, Box } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import Logo from '../components/Logo';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
+import Conjunto3D from '../components/Conjunto3D/Conjunto3D';
 
 export default function PorteroDashboard({ user }) {
   const { showToast, ToastContainer } = useToast();
@@ -175,6 +176,32 @@ export default function PorteroDashboard({ user }) {
               </p>
             </div>
           ))}
+        </div>
+
+        {/* Vista 3D en vivo del conjunto */}
+        <div className="se-card" style={{ borderRadius: 16, overflow: 'hidden' }}>
+          <div className="se-section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: 'rgba(14,165,233,0.12)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Box size={17} style={{ color: '#0EA5E9' }} />
+              </div>
+              <div>
+                <h2 className="se-heading" style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--se-text-primary)' }}>
+                  Simulación 3D del Conjunto
+                </h2>
+                <p style={{ fontSize: '0.7rem', color: 'var(--se-text-muted)', marginTop: 1 }}>
+                  Visualización en vivo de accesos y plazas
+                </p>
+              </div>
+            </div>
+            <span className="se-badge se-badge-accent">
+              <span className="se-pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--se-accent)', display: 'inline-block' }} />
+              Tiempo real
+            </span>
+          </div>
+          <div style={{ padding: '0.75rem' }}>
+            <Conjunto3D parqueaderos={parqueaderos} historial={historial} />
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">

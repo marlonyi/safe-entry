@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SafeEntry — Vista 3D del Conjunto</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #080D14; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+    canvas { display: block; }
+
+    /* HUD overlay */
+    #hud {
+      position: fixed; top: 0; left: 0; right: 0;
+      display: flex; justify-content: space-between; align-items: flex-start;
+      padding: 18px 24px; pointer-events: none; z-index: 10;
+    }
+    #brand {
+      display: flex; align-items: center; gap: 12px;
+    }
+    #brand-icon {
+      width: 40px; height: 40px; border-radius: 10px;
+      background: linear-gradient(135deg, #0c1a2e, #0a2540);
+      border: 1px solid rgba(14,165,233,0.4);
+      display: flex; align-items: center; justify-content: center;
+    }
+    #brand h1 { font-size: 1.1rem; font-weight: 800; color: #F1F5F9; letter-spacing: 0.02em; }
+    #brand p  { font-size: 0.68rem; color: #64748B; margin-top: 1px; }
+
+    #stats {
+      display: flex; gap: 10px;
+    }
+    .stat-chip {
+      background: rgba(8,13,20,0.85);
+      border: 1px solid rgba(14,165,233,0.18);
+      border-radius: 10px;
+      padding: 8px 14px;
+      text-align: center;
+      backdrop-filter: blur(10px);
+    }
+    .stat-chip .val { font-size: 1.2rem; font-weight: 800; color: #F1F5F9; }
+    .stat-chip .lbl { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.08em; color: #64748B; margin-top: 2px; }
+
+    /* Bottom legend */
+    #legend {
+      position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+      display: flex; gap: 16px; align-items: center;
+      background: rgba(8,13,20,0.85); border: 1px solid rgba(14,165,233,0.15);
+      border-radius: 999px; padding: 10px 22px;
+      backdrop-filter: blur(10px); pointer-events: none; z-index: 10;
+    }
+    .leg-item { display: flex; align-items: center; gap: 7px; font-size: 0.72rem; color: #94A3B8; }
+    .leg-dot  { width: 10px; height: 10px; border-radius: 3px; }
+
+    /* Controls hint */
+    #hint {
+      position: fixed; bottom: 20px; right: 24px;
+      font-size: 0.65rem; color: #475569;
+      text-align: right; pointer-events: none; z-index: 10; line-height: 1.8;
+    }
+
+    /* Pulse on available spots */
+    @keyframes pulse-avail { 0%,100%{opacity:1} 50%{opacity:0.55} }
+
+    /* Tour button */
+    #tour-btn {
+      position: fixed; bottom: 20px; left: 24px; z-index: 10;
+      background: rgba(14,165,233,0.15); border: 1px solid rgba(14,165,233,0.35);
+      color: #7DD3FC; font-size: 0.75rem; font-weight: 700;
+      padding: 9px 18px; border-radius: 10px; cursor: pointer;
+      backdrop-filter: blur(10px); transition: all 0.2s;
+      letter-spacing: 0.04em;
+    }
+    #tour-btn:hover { background: rgba(14,165,233,0.28); color: #E0F2FE; }
+  </style>
+</head>
+<body>
+
+<!-- HUD -->
+<div id="hud">
+  <div id="brand">
+    <div id="brand-icon">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0EA5E9" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <div>
+      <h1>SafeEntry</h1>
+      <p>Vista 3D del Conjunto Residencial</p>
+    </div>
+  </div>
+  <div id="stats">
+    <div class="stat-chip">
+      <div class="val" id="stat-total">18</div>
+      <div class="lbl">Total Plazas</div>
+    </div>
+    <div class="stat-chip">
+      <div class="val" id="stat-libre" style="color:#10B981">12</div>
+      <div class="lbl">Disponibles</div>
+    </div>
+    <div class="stat-chip">
+      <div class="val" id="stat-ocup" style="color:#EF4444">6</div>
+      <div class="lbl">Ocupadas</div>
+    </div>
+    <div class="stat-chip">
+      <div class="val" id="stat-vis" style="color:#F59E0B">3</div>
+      <div class="lbl">Visitantes</div>
+    </div>
+  </div>
+</div>
+
+<!-- Legend -->
+<div id="legend">
+  <div class="leg-item"><div class="leg-dot" style="background:#10B981"></div>Disponible</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#EF4444"></div>Ocupada Residente</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#F59E0B"></div>Ocupada Visitante</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#6366F1"></div>Reservada</div>
+  <div class="leg-item"><div class="leg-dot" style="background:#334155"></div>Edificio</div>
+</div>
+
+<!-- Tour toggle -->
+<button id="tour-btn" onclick="toggleTour()">⏸ Pausar Tour</button>
+
+<!-- Controls hint -->
+<div id="hint">
+  🖱 Arrastrar para rotar<br>
+  🖱 Rueda para zoom<br>
+  Click derecho para mover
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.11.4/gsap.min.js"></script>
+
+<script>
+// ─── Setup ───────────────────────────────────────────────────────────────────
+const scene    = new THREE.Scene();
+const camera   = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.1, 500);
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.9;
+document.body.appendChild(renderer.domElement);
+
+camera.position.set(40, 32, 40);
+camera.lookAt(0, 0, 0);
+
+// ─── Fog & Background ────────────────────────────────────────────────────────
+scene.background = new THREE.Color(0x080D14);
+scene.fog = new THREE.FogExp2(0x0D1520, 0.012);
+
+// ─── Lighting ────────────────────────────────────────────────────────────────
+const ambient = new THREE.AmbientLight(0x1a2840, 0.8);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0x7eb8d4, 1.2);
+sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.near = 0.1;
+sun.shadow.camera.far = 200;
+sun.shadow.camera.left = sun.shadow.camera.bottom = -60;
+sun.shadow.camera.right = sun.shadow.camera.top = 60;
+sun.shadow.bias = -0.001;
+scene.add(sun);
+
+// Accent rim light (blue)
+const rimLight = new THREE.DirectionalLight(0x0ea5e9, 0.5);
+rimLight.position.set(-20, 15, -20);
+scene.add(rimLight);
+
+// Point lights for ambience
+[[8,6,8,0x3b82f6,1.5], [-8,6,8,0x10b981,1.2], [0,8,-10,0x6366f1,1.0]].forEach(([x,y,z,c,i]) => {
+  const pl = new THREE.PointLight(c, i, 25);
+  pl.position.set(x, y, z);
+  scene.add(pl);
+});
+
+// ─── Materials ───────────────────────────────────────────────────────────────
+const groundMat = new THREE.MeshLambertMaterial({ color: 0x0f1923 });
+const roadMat   = new THREE.MeshLambertMaterial({ color: 0x141f2e });
+const buildMats = [
+  new THREE.MeshPhongMaterial({ color: 0x1e3a5f, shininess: 30 }),
+  new THREE.MeshPhongMaterial({ color: 0x162d4a, shininess: 30 }),
+  new THREE.MeshPhongMaterial({ color: 0x0d2238, shininess: 30 }),
+];
+const roofMat   = new THREE.MeshPhongMaterial({ color: 0x0a3d62, shininess: 60 });
+const glassMat  = new THREE.MeshPhongMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.35, shininess: 100 });
+
+const spotMats = {
+  available: new THREE.MeshPhongMaterial({ color: 0x10b981, emissive: 0x064e3b, emissiveIntensity: 0.4 }),
+  resident:  new THREE.MeshPhongMaterial({ color: 0xef4444, emissive: 0x7f1d1d, emissiveIntensity: 0.4 }),
+  visitor:   new THREE.MeshPhongMaterial({ color: 0xf59e0b, emissive: 0x78350f, emissiveIntensity: 0.4 }),
+  reserved:  new THREE.MeshPhongMaterial({ color: 0x6366f1, emissive: 0x312e81, emissiveIntensity: 0.4 }),
+};
+
+const treeMat  = new THREE.MeshPhongMaterial({ color: 0x134e30 });
+const trunkMat = new THREE.MeshPhongMaterial({ color: 0x3d2b1f });
+
+// ─── Ground ──────────────────────────────────────────────────────────────────
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(120, 120), groundMat);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// Grid lines
+const gridHelper = new THREE.GridHelper(120, 40, 0x1e3a5f, 0x0d1f33);
+gridHelper.position.y = 0.01;
+scene.add(gridHelper);
+
+// ─── Roads ───────────────────────────────────────────────────────────────────
+function makeRoad(w, d, x, y, z) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.05, d), roadMat);
+  m.position.set(x, y, z);
+  m.receiveShadow = true;
+  scene.add(m);
+}
+makeRoad(120, 6, 0, 0.02,  0);   // main horizontal road
+makeRoad(6, 120, 0, 0.02,  0);   // main vertical road
+makeRoad(60, 3.5, -15, 0.02, 16); // parking access
+makeRoad(60, 3.5, -15, 0.02,-16); // parking access
+
+// Road markings (dashed center line)
+for (let i = -55; i < 55; i += 6) {
+  const dash = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.2, 3),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+  );
+  dash.rotation.x = -Math.PI / 2;
+  dash.position.set(i, 0.06, 0);
+  scene.add(dash);
+}
+for (let i = -55; i < 55; i += 6) {
+  const dash = new THREE.Mesh(
+    new THREE.PlaneGeometry(3, 0.2),
+    new THREE.MeshBasicMaterial({ color: 0xfbbf24 })
+  );
+  dash.rotation.x = -Math.PI / 2;
+  dash.position.set(0, 0.06, i);
+  scene.add(dash);
+}
+
+// ─── Buildings ───────────────────────────────────────────────────────────────
+const buildingData = [
+  { x: -18, z: -20, w: 10, h: 28, d: 10, mat: 0 },
+  { x:  18, z: -20, w: 10, h: 22, d: 10, mat: 1 },
+  { x: -18, z:  20, w: 10, h: 20, d: 10, mat: 2 },
+  { x:  18, z:  20, w: 10, h: 24, d: 10, mat: 0 },
+  { x:   0, z: -24, w: 8,  h: 18, d: 8,  mat: 1 },
+];
+
+buildingData.forEach(b => {
+  const body = new THREE.Mesh(
+    new THREE.BoxGeometry(b.w, b.h, b.d),
+    buildMats[b.mat]
+  );
+  body.position.set(b.x, b.h / 2, b.z);
+  body.castShadow = true;
+  body.receiveShadow = true;
+  scene.add(body);
+
+  // Roof
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(b.w + 0.4, 0.8, b.d + 0.4), roofMat);
+  roof.position.set(b.x, b.h + 0.4, b.z);
+  roof.castShadow = true;
+  scene.add(roof);
+
+  // Window grid
+  const cols = Math.floor(b.w / 2.2);
+  const rows = Math.floor(b.h / 3.5);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(1.1, 1.4, 0.05), glassMat);
+      win.position.set(
+        b.x - (b.w / 2) + 1.4 + c * (b.w / cols),
+        1.8 + r * (b.h / rows),
+        b.z + b.d / 2 + 0.01
+      );
+      scene.add(win);
+      // Back face
+      const winB = win.clone();
+      winB.position.z = b.z - b.d / 2 - 0.01;
+      winB.rotation.y = Math.PI;
+      scene.add(winB);
+    }
+  }
+
+  // Antenna
+  const ant = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 3.5, 6), new THREE.MeshBasicMaterial({ color: 0x0ea5e9 }));
+  ant.position.set(b.x + b.w * 0.25, b.h + 2.55, b.z);
+  scene.add(ant);
+  const ball = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshPhongMaterial({ color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 1 }));
+  ball.position.set(b.x + b.w * 0.25, b.h + 4.5, b.z);
+  scene.add(ball);
+});
+
+// ─── Parking Spots ───────────────────────────────────────────────────────────
+const SPOT_STATES = [
+  'available','available','available','available',
+  'resident','resident','resident',
+  'visitor','visitor','visitor',
+  'available','available','available',
+  'resident','resident',
+  'available','reserved','available',
+];
+
+const spots = [];
+const spotObjects = [];
+
+const cols = 6, rows = 3;
+const spotW = 3.2, spotD = 5.5, gap = 0.4;
+const startX = -((cols * (spotW + gap)) / 2) + spotW / 2;
+const startZ = 22;
+
+for (let row = 0; row < rows; row++) {
+  for (let col = 0; col < cols; col++) {
+    const idx = row * cols + col;
+    const state = SPOT_STATES[idx] || 'available';
+
+    const sx = startX + col * (spotW + gap);
+    const sz = startZ + row * (spotD + gap);
+
+    // Spot base
+    const spotBase = new THREE.Mesh(
+      new THREE.BoxGeometry(spotW, 0.08, spotD),
+      spotMats[state].clone()
+    );
+    spotBase.position.set(sx, 0.04, sz);
+    spotBase.receiveShadow = true;
+    scene.add(spotBase);
+    spotObjects.push(spotBase);
+    spots.push({ base: spotBase, state, idx, x: sx, z: sz });
+
+    // Spot number label (mini box)
+    const label = new THREE.Mesh(
+      new THREE.BoxGeometry(1.2, 0.05, 0.6),
+      new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.12 })
+    );
+    label.position.set(sx, 0.1, sz - spotD / 2 + 0.5);
+    scene.add(label);
+
+    // Divider lines
+    if (col < cols - 1) {
+      const div = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.1, spotD),
+        new THREE.MeshBasicMaterial({ color: 0x94a3b8, transparent: true, opacity: 0.5 })
+      );
+      div.position.set(sx + spotW / 2 + gap / 2, 0.05, sz);
+      scene.add(div);
+    }
+
+    // Car mesh on occupied spots
+    if (state === 'resident' || state === 'visitor') {
+      addCar(sx, sz, state === 'visitor' ? 0xfbbf24 : 0x60a5fa);
+    }
+    if (state === 'reserved') {
+      addCar(sx, sz, 0x818cf8);
+    }
+  }
+}
+
+function addCar(x, z, color) {
+  const carBody = new THREE.Mesh(
+    new THREE.BoxGeometry(1.8, 0.7, 3.8),
+    new THREE.MeshPhongMaterial({ color, shininess: 80 })
+  );
+  carBody.position.set(x, 0.45, z);
+  carBody.castShadow = true;
+  scene.add(carBody);
+
+  const carTop = new THREE.Mesh(
+    new THREE.BoxGeometry(1.4, 0.55, 2.2),
+    new THREE.MeshPhongMaterial({ color, shininess: 60 })
+  );
+  carTop.position.set(x, 0.95, z);
+  carTop.castShadow = true;
+  scene.add(carTop);
+
+  // Windshield
+  const wind = new THREE.Mesh(
+    new THREE.BoxGeometry(1.35, 0.5, 0.05),
+    new THREE.MeshPhongMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.5, shininess: 100 })
+  );
+  wind.position.set(x, 0.95, z + 1.12);
+  scene.add(wind);
+
+  // Wheels
+  const wheelMat = new THREE.MeshPhongMaterial({ color: 0x1e293b });
+  [[-0.9,1.4], [0.9,1.4], [-0.9,-1.4], [0.9,-1.4]].forEach(([wx, wz]) => {
+    const w = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.25, 12), wheelMat);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(x + wx, 0.3, z + wz);
+    scene.add(w);
+  });
+
+  // Headlights glow
+  const hl = new THREE.Mesh(
+    new THREE.SphereGeometry(0.15, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xfef9c3 })
+  );
+  hl.position.set(x - 0.55, 0.45, z + 1.92);
+  scene.add(hl);
+  const hr = hl.clone();
+  hr.position.x = x + 0.55;
+  scene.add(hr);
+}
+
+// ─── Trees ───────────────────────────────────────────────────────────────────
+const treePositions = [
+  [-8,6], [8,6], [-8,-6], [8,-6],
+  [-30,10], [30,10], [-30,-10], [30,-10],
+  [0, 10], [0,-10], [14,0], [-14,0],
+  [-28,25], [28,25], [-28,-25], [28,-25],
+];
+
+treePositions.forEach(([x, z]) => {
+  const h = 3 + Math.random() * 2;
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, h, 7), trunkMat);
+  trunk.position.set(x, h / 2, z);
+  trunk.castShadow = true;
+  scene.add(trunk);
+
+  const crown = new THREE.Mesh(new THREE.SphereGeometry(0.9 + Math.random() * 0.5, 8, 8), treeMat);
+  crown.position.set(x, h + 0.7, z);
+  crown.castShadow = true;
+  scene.add(crown);
+});
+
+// ─── Entrance Gate ───────────────────────────────────────────────────────────
+const gatePost = (x) => {
+  const p = new THREE.Mesh(new THREE.BoxGeometry(0.5, 3.5, 0.5),
+    new THREE.MeshPhongMaterial({ color: 0x0c1a2e }));
+  p.position.set(x, 1.75, -58);
+  p.castShadow = true;
+  scene.add(p);
+  const cap = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.4, 0.8),
+    new THREE.MeshPhongMaterial({ color: 0x0ea5e9, emissive: 0x0ea5e9, emissiveIntensity: 0.6 }));
+  cap.position.set(x, 3.7, -58);
+  scene.add(cap);
+};
+gatePost(-4); gatePost(4);
+
+const gateBar = new THREE.Mesh(new THREE.BoxGeometry(7.5, 0.2, 0.2),
+  new THREE.MeshPhongMaterial({ color: 0xef4444, emissive: 0x7f1d1d, emissiveIntensity: 0.5 }));
+gateBar.position.set(0, 3.5, -58);
+scene.add(gateBar);
+
+const gateSign = new THREE.Mesh(new THREE.BoxGeometry(4, 1.2, 0.1),
+  new THREE.MeshPhongMaterial({ color: 0x0c1a2e, emissive: 0x0ea5e9, emissiveIntensity: 0.15 }));
+gateSign.position.set(0, 5.5, -58);
+scene.add(gateSign);
+
+// ─── Perimeter Fence ─────────────────────────────────────────────────────────
+const fenceMat = new THREE.MeshBasicMaterial({ color: 0x1e3a5f, transparent: true, opacity: 0.6 });
+[
+  [0, -52, 100, 0.1, 2.5, 0.15],
+  [0,  52, 100, 0.1, 2.5, 0.15],
+  [-52, 0, 0.15, 2.5, 104, 0.1],
+  [ 52, 0, 0.15, 2.5, 104, 0.1],
+].forEach(([x,z,w,h,d]) => {
+  const f = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), fenceMat);
+  f.position.set(x, h/2, z);
+  scene.add(f);
+});
+
+// ─── Swimming Pool ────────────────────────────────────────────────────────────
+const poolBase = new THREE.Mesh(
+  new THREE.BoxGeometry(12, 0.6, 7),
+  new THREE.MeshPhongMaterial({ color: 0x0c4a6e })
+);
+poolBase.position.set(-8, 0.3, 8);
+scene.add(poolBase);
+
+const water = new THREE.Mesh(
+  new THREE.PlaneGeometry(11, 6),
+  new THREE.MeshPhongMaterial({ color: 0x0ea5e9, transparent: true, opacity: 0.75, shininess: 200 })
+);
+water.rotation.x = -Math.PI / 2;
+water.position.set(-8, 0.62, 8);
+scene.add(water);
+
+// Pool deck
+const deck = new THREE.Mesh(
+  new THREE.BoxGeometry(14, 0.1, 9),
+  new THREE.MeshPhongMaterial({ color: 0x1e3a5f })
+);
+deck.position.set(-8, 0.05, 8);
+scene.add(deck);
+
+// ─── Mini park ───────────────────────────────────────────────────────────────
+const grass = new THREE.Mesh(
+  new THREE.CircleGeometry(4.5, 24),
+  new THREE.MeshPhongMaterial({ color: 0x134e30 })
+);
+grass.rotation.x = -Math.PI / 2;
+grass.position.set(10, 0.02, 8);
+scene.add(grass);
+
+// Bench
+const benchSeat = new THREE.Mesh(new THREE.BoxGeometry(2, 0.12, 0.5),
+  new THREE.MeshPhongMaterial({ color: 0x3d2b1f }));
+benchSeat.position.set(10, 0.45, 8);
+scene.add(benchSeat);
+
+// ─── Orbit Controls (manual) ─────────────────────────────────────────────────
+let isDragging = false, prevX = 0, prevY = 0;
+let theta = 0.78, phi = 0.62, radius = 62;
+let targetTheta = theta, targetPhi = phi, targetRadius = radius;
+let autoTour = true;
+
+renderer.domElement.addEventListener('mousedown', e => { isDragging = true; prevX = e.clientX; prevY = e.clientY; });
+renderer.domElement.addEventListener('mouseup',   () => isDragging = false);
+renderer.domElement.addEventListener('mousemove', e => {
+  if (!isDragging) return;
+  const dx = (e.clientX - prevX) * 0.008;
+  const dy = (e.clientY - prevY) * 0.006;
+  targetTheta -= dx;
+  targetPhi   = Math.max(0.15, Math.min(1.4, targetPhi - dy));
+  prevX = e.clientX; prevY = e.clientY;
+  autoTour = false;
+  document.getElementById('tour-btn').textContent = '▶ Reanudar Tour';
+});
+renderer.domElement.addEventListener('wheel', e => {
+  targetRadius = Math.max(20, Math.min(100, targetRadius + e.deltaY * 0.05));
+});
+renderer.domElement.addEventListener('touchstart', e => { isDragging = true; prevX = e.touches[0].clientX; prevY = e.touches[0].clientY; });
+renderer.domElement.addEventListener('touchend',   () => isDragging = false);
+renderer.domElement.addEventListener('touchmove',  e => {
+  if (!isDragging) return;
+  const dx = (e.touches[0].clientX - prevX) * 0.01;
+  const dy = (e.touches[0].clientY - prevY) * 0.008;
+  targetTheta -= dx;
+  targetPhi = Math.max(0.15, Math.min(1.4, targetPhi - dy));
+  prevX = e.touches[0].clientX; prevY = e.touches[0].clientY;
+  autoTour = false;
+});
+
+function toggleTour() {
+  autoTour = !autoTour;
+  document.getElementById('tour-btn').textContent = autoTour ? '⏸ Pausar Tour' : '▶ Reanudar Tour';
+}
+
+// ─── Random parking state updates ────────────────────────────────────────────
+let visitorCount = 3;
+function randomUpdate() {
+  const idx = Math.floor(Math.random() * spots.length);
+  const s = spots[idx];
+  const states = ['available','available','resident','visitor'];
+  const newState = states[Math.floor(Math.random() * states.length)];
+  s.state = newState;
+  s.base.material = spotMats[newState].clone();
+
+  // Update stats
+  const libre  = spots.filter(s => s.state === 'available').length;
+  const ocup   = spots.filter(s => s.state === 'resident' || s.state === 'reserved').length;
+  const vis    = spots.filter(s => s.state === 'visitor').length;
+  document.getElementById('stat-libre').textContent = libre;
+  document.getElementById('stat-ocup').textContent  = ocup;
+  document.getElementById('stat-vis').textContent   = vis;
+}
+setInterval(randomUpdate, 3500);
+
+// ─── Water shimmer ───────────────────────────────────────────────────────────
+let wt = 0;
+
+// ─── Resize ──────────────────────────────────────────────────────────────────
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// ─── Animation Loop ──────────────────────────────────────────────────────────
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const t = clock.getElapsedTime();
+
+  // Auto orbit
+  if (autoTour) {
+    targetTheta += 0.0025;
+    targetPhi = 0.55 + Math.sin(t * 0.12) * 0.18;
+    targetRadius = 58 + Math.sin(t * 0.07) * 8;
+  }
+
+  // Smooth lerp
+  theta  += (targetTheta  - theta)  * 0.06;
+  phi    += (targetPhi    - phi)    * 0.06;
+  radius += (targetRadius - radius) * 0.06;
+
+  camera.position.set(
+    radius * Math.sin(phi) * Math.sin(theta),
+    radius * Math.cos(phi),
+    radius * Math.sin(phi) * Math.cos(theta)
+  );
+  camera.lookAt(0, 4, 5);
+
+  // Water shimmer
+  water.material.opacity = 0.65 + Math.sin(t * 2.5) * 0.08;
+  water.rotation.z = Math.sin(t * 0.4) * 0.015;
+
+  // Antenna lights pulse
+  scene.children.forEach(child => {
+    if (child.isMesh && child.material?.emissive?.r > 0 && child.geometry?.type === 'SphereGeometry') {
+      child.material.emissiveIntensity = 0.6 + Math.sin(t * 3 + child.position.x) * 0.35;
+    }
+  });
+
+  // Gate bar color oscillate (red/green)
+  gateBar.material.emissiveIntensity = 0.4 + Math.sin(t * 1.2) * 0.3;
+
+  renderer.render(scene, camera);
+}
+
+animate();
+</script>
+</body>
+</html>
