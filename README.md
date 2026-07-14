@@ -62,8 +62,8 @@ cd frontend && npm run dev
 # Demo local — backend + frontend + MongoDB
 docker compose --env-file .env.docker -f docker-compose.demo.yml up -d --build
 
-# Solo backend + MongoDB (apunta al frontend de Vercel)
-docker compose -f docker-compose.yml up -d
+# Backend + MongoDB + LPR (Python con cámara — solo Linux con USB passthrough)
+docker compose -f docker-compose-local.yml up -d
 
 # Detener y borrar volúmenes
 docker compose -f docker-compose.demo.yml down -v
@@ -185,8 +185,8 @@ admin_residencial/
 ├── scripts/                        # Utilidades de mantenimiento
 ├── server.js                       # Punto de entrada Express
 ├── Dockerfile
-├── docker-compose.yml              # Producción
-├── docker-compose.demo.yml         # Demo local completo
+├── docker-compose.demo.yml         # Demo local completo (backend + frontend + mongo)
+├── docker-compose-local.yml        # Backend + mongo + LPR (Linux, cámara USB)
 ├── .env.example                    # Plantilla de variables de entorno
 └── CLAUDE.md                       # Guía de arquitectura para IA
 ```
