@@ -14,8 +14,15 @@ node_modules/
 !.env.docker.example
 
 # ── Config MCP local (contiene credenciales — NUNCA subir) ─────
-.mcp.json
-!.mcp.json.example
+.mcp.json*
+
+# ── Tooling de agentes/IA (Claude Code) — no pertenece al repo ─
+.claude/
+.agents/
+skills-lock.json
+
+# ── Planes de trabajo internos (no se publican) ───────────────
+plans/
 
 # ── Logs ──────────────────────────────────────────────────────
 logs/
