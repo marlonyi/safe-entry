@@ -24,10 +24,10 @@ async function registrarAuditoria(req, accion, opciones = {}) {
     try {
         const datos = {
             usuario: {
-                id: req.user?._id || opciones.usuarioId,
-                cedula: req.user?.cedula || opciones.cedula || 'anonymous',
-                nombre: req.user?.nombre || opciones.nombre || 'Anónimo',
-                rol: req.user?.rol || opciones.rol || 'unknown'
+                id: req.usuarioLogueado?.id || opciones.usuarioId,
+                cedula: req.usuarioLogueado?.cedula || opciones.cedula || 'anonymous',
+                nombre: req.usuarioLogueado?.nombre || opciones.nombre || 'Anónimo',
+                rol: req.usuarioLogueado?.rol || opciones.rol || 'unknown'
             },
             accion,
             descripcion: opciones.descripcion || '',
@@ -104,7 +104,7 @@ const audit = {
 
     // Logout
     logout: (req) => registrarAuditoria(req, 'LOGOUT', {
-        descripcion: `Usuario ${req.user?.nombre || 'unknown'} cerró sesión`
+        descripcion: `Usuario ${req.usuarioLogueado?.nombre || 'unknown'} cerró sesión`
     }),
 
     // Crear usuario

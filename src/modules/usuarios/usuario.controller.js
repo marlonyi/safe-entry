@@ -147,8 +147,8 @@ exports.crearUsuario = async (req, res) => {
 
         await nuevoUsuario.save();
 
-        // Registrar en auditoría - obtener info del usuario que ejecuta la acción
-        const usuarioEjecutor = req.usuarioLogueado || req.body.ejecutadoPor || null;
+        // Registrar en auditoría - actor derivado del token (no del cliente)
+        const usuarioEjecutor = req.usuarioLogueado || null;
         if (usuarioEjecutor) {
             try {
                 await AuditLog.registrar({
@@ -627,9 +627,6 @@ exports.actualizarUsuario = async (req, res) => {
                 if (req.body[campo] !== undefined) datos[campo] = req.body[campo];
             }
         }
-        // Preservar el ejecutor para la auditoría (se extrae más abajo)
-        if (req.body.ejecutadoPor !== undefined) datos.ejecutadoPor = req.body.ejecutadoPor;
-
         // Obtener estado anterior ANTES de actualizar
         const usuarioAnterior = await Usuario.findById(id).lean();
         if (!usuarioAnterior) {
@@ -652,9 +649,9 @@ exports.actualizarUsuario = async (req, res) => {
             }
         }
 
-        // Extraer info del ejecutor si viene
-        const usuarioEjecutor = datos.ejecutadoPor;
-        delete datos.ejecutadoPor;
+        // Actor de la auditoría: SIEMPRE derivado del token (no del cliente).
+        delete datos.ejecutadoPor; // descartar cualquier ejecutadoPor que mande el cliente
+        const usuarioEjecutor = req.usuarioLogueado;
 
         // Quitar undefined o vacíos para no sobreescribir
         Object.keys(datos).forEach(key => {
@@ -744,7 +741,7 @@ exports.eliminarUsuario = async (req, res) => {
         const Visitante = require("../visitantes/visitante.model");
         const { isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
         const { id, tipo } = req.params;
-        const usuarioEjecutor = req.body?.ejecutadoPor || null;
+        const usuarioEjecutor = req.usuarioLogueado || null;
 
         if (id === "admin") {
             return errorResponse(res, "No puedes eliminar al administrador", 400);

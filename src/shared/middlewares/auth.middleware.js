@@ -42,6 +42,16 @@ const verificarToken = (req, res, next) => {
 
         // Agregar datos del usuario al request (ahora incluye conjuntoId)
         req.usuario = decoded;
+
+        // Identidad canónica del actor para auditoría, derivada del token firmado
+        // por el servidor (NO de datos del cliente → no falsificable). nombre/cédula
+        // no viajan en el JWT; los registros de login los aportan vía `opciones`.
+        req.usuarioLogueado = {
+            id: decoded.id,
+            rol: decoded.rol,
+            conjuntoId: decoded.conjuntoId || null
+        };
+
         next();
     } catch (error) {
         console.error('Error verificando token:', error.message);
