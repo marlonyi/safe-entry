@@ -805,9 +805,24 @@ exports.obtenerMiPerfil = async (req, res) => {
             });
         }
 
+        // 🔒 Control de acceso: solo el propio usuario, o admin/superadmin, pueden ver el perfil
+        const esPropio = req.usuario?.id === id;
+        const esStaff = ['admin', 'superadmin'].includes(req.usuario?.rol);
+        if (!esPropio && !esStaff) {
+            return errorResponse(res, "No tienes permisos para ver este perfil", 403);
+        }
+
         const usuario = await Usuario.findById(id, '-password -__v');
         if (!usuario) {
             return errorResponse(res, "Usuario no encontrado", 404);
+        }
+
+        // 🏢 Un admin (no superadmin) solo puede ver usuarios de su propio conjunto
+        if (!esPropio && esStaff && req.usuario?.rol !== 'superadmin') {
+            const mismoConjunto = usuario.conjunto?.toString() === req.usuario?.conjuntoId;
+            if (!mismoConjunto) {
+                return errorResponse(res, "No tienes permisos para ver este perfil", 403);
+            }
         }
 
         res.json(usuario);
@@ -830,6 +845,11 @@ exports.actualizarFotoPerfil = async (req, res) => {
 
         if (id === "admin") {
             return errorResponse(res, "No se puede modificar el perfil del administrador del sistema", 400);
+        }
+
+        // 🔒 Solo el propio usuario puede cambiar su foto (no existe flujo admin para esto)
+        if (req.usuario?.id !== id) {
+            return errorResponse(res, "No puedes modificar la foto de otro usuario", 403);
         }
 
         // Validar que el ID sea un ObjectId válido

@@ -5,7 +5,7 @@ const router = express.Router();
 // ========================================
 const { models, middlewares, logger } = require('../../index');
 const { Parqueadero, Visitante } = models;
-const { verificarToken, esPorteriaOAdmin } = middlewares.auth;
+const { verificarToken, esPorteriaOAdmin, getTenantFilter } = middlewares.auth;
 const { verificarLimiteVisitantes } = middlewares.planLimits;
 const { validateCreateVisitante, validateMongoId } = middlewares.validation;
 const visitanteController = require('./visitante.controller');
@@ -355,7 +355,7 @@ router.post("/qr/salida/:token", async (req, res) => {
 // =======================================================
 router.post("/verificar-acceso", async (req, res) => {
     try {
-        const { cedula, codigo } = req.body;
+        const { cedula, codigo, conjuntoId } = req.body;
 
         if (!cedula || !codigo) {
             return res.status(400).json({
@@ -364,8 +364,16 @@ router.post("/verificar-acceso", async (req, res) => {
             });
         }
 
-        // Buscar visitante por cédula
-        let visitante = await Visitante.findOne({ cedula: cedula.trim() });
+        // Buscar visitante por cédula, acotando al conjunto si el cliente lo provee.
+        // NOTA: el frontend público (VisitanteAcceso.jsx) aún no envía conjuntoId;
+        // mientras tanto, si dos conjuntos comparten una cédula, findOne es no
+        // determinista. Cerrar esto del todo requiere codificar el conjunto en la
+        // URL/QR del visitante (decisión de producto — ver plan 007, fuera de alcance).
+        const filtro = { cedula: cedula.trim() };
+        if (conjuntoId) {
+            filtro.conjunto = conjuntoId;
+        }
+        let visitante = await Visitante.findOne(filtro);
         if (!visitante) {
             return res.status(404).json({
                 success: false,
@@ -439,15 +447,27 @@ router.post("/verificar-acceso", async (req, res) => {
 // =======================================================
 // 📌 TOTP - Obtener código dinámico actual (para residente)
 // =======================================================
-router.get("/:visitanteId/codigo-actual", async (req, res) => {
+router.get("/:visitanteId/codigo-actual", verificarToken, async (req, res) => {
     try {
         const { visitanteId } = req.params;
 
-        let visitante = await Visitante.findById(visitanteId);
+        // 🏢 Acotar al conjunto del solicitante (superadmin ve todos)
+        const tenantFilter = getTenantFilter(req);
+        let visitante = await Visitante.findOne({ _id: visitanteId, ...tenantFilter });
         if (!visitante) {
             return res.status(404).json({
                 success: false,
                 error: "Visitante no encontrado"
+            });
+        }
+
+        // 🔒 Solo el residente que lo registró, o staff, pueden ver el código TOTP
+        const esDueno = visitante.residenteId?.toString() === req.usuario?.id;
+        const esStaff = ['admin', 'superadmin', 'porteria'].includes(req.usuario?.rol);
+        if (!esDueno && !esStaff) {
+            return res.status(403).json({
+                success: false,
+                error: "No tienes permisos para ver este código"
             });
         }
 
