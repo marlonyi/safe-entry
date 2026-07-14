@@ -31,6 +31,12 @@ const app = express();
 const port = process.env.PORT || 5000;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// Confía en 1 proxy (Render/load balancer) para que req.ip refleje la IP real
+// del cliente (no la del proxy) y el rate limiter/login-lockout keyeen bien.
+// '1' = exactamente un hop de confianza; si la topología añade otro proxy
+// (p. ej. un CDN delante), ajustar este número al número real de hops.
+app.set('trust proxy', 1);
+
 // ========================================
 // 🔒 Validación de seguridad al inicio
 // ========================================
@@ -46,13 +52,17 @@ if (isProduction && (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'secr
 function isPrivateIP(origin) {
     if (!origin) return false;
     const url = origin.replace(/^https?:\/\//, '').split(':')[0];
-    return url === 'localhost' ||
-        url === '127.0.0.1' ||
-        url.startsWith('192.168.') ||
-        url.startsWith('10.') ||
-        url.startsWith('172.16.') || url.startsWith('172.17.') ||
-        url.startsWith('172.18.') || url.startsWith('172.19.') ||
-        url.startsWith('172.2') || url.startsWith('172.30.') || url.startsWith('172.31.');
+    if (url === 'localhost' || url === '127.0.0.1') return true;
+    if (url.startsWith('192.168.')) return true;
+    if (url.startsWith('10.')) return true;
+
+    // 172.16.0.0/12 = 172.16.x.x .. 172.31.x.x (NO 172.2.x.x ni 172.200.x.x)
+    const match = url.match(/^172\.(\d{1,3})\./);
+    if (match) {
+        const secondOctet = parseInt(match[1], 10);
+        return secondOctet >= 16 && secondOctet <= 31;
+    }
+    return false;
 }
 
 const corsOptions = {
