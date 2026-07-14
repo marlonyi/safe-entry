@@ -205,8 +205,9 @@ app.get('/api/audit/logs', verificarToken, esAdmin, async (req, res) => {
 app.get('/api/audit/stats', verificarToken, esAdmin, async (req, res) => {
     try {
         const dias = parseInt(req.query.dias) || 7;
-        // 🏢 TODO: Agregar filtro por conjunto si no es superadmin
-        const stats = await AuditLog.obtenerEstadisticas(dias);
+        // 🏢 SuperAdmin ve todos, otros solo de su conjunto
+        const conjuntoId = isSuperAdmin(req) ? null : getConjuntoId(req);
+        const stats = await AuditLog.obtenerEstadisticas(dias, conjuntoId);
         const rateLimitStatus = getRateLimitStatus();
         res.json({ ...stats, rateLimiting: rateLimitStatus });
     } catch (error) {

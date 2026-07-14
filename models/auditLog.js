@@ -136,12 +136,15 @@ auditLogSchema.statics.obtenerPorIP = function (ip, limite = 20) {
 };
 
 // Método estático para estadísticas
-auditLogSchema.statics.obtenerEstadisticas = async function (dias = 7) {
+auditLogSchema.statics.obtenerEstadisticas = async function (dias = 7, conjuntoId = null) {
     const fechaInicio = new Date();
     fechaInicio.setDate(fechaInicio.getDate() - dias);
 
+    // 🏢 MULTI-TENANT: si hay conjuntoId, acotar a ese conjunto
+    const filtroConjunto = conjuntoId ? { conjunto: conjuntoId } : {};
+
     const stats = await this.aggregate([
-        { $match: { fecha: { $gte: fechaInicio } } },
+        { $match: { fecha: { $gte: fechaInicio }, ...filtroConjunto } },
         {
             $group: {
                 _id: '$accion',
@@ -153,12 +156,14 @@ auditLogSchema.statics.obtenerEstadisticas = async function (dias = 7) {
 
     const failed = await this.countDocuments({
         fecha: { $gte: fechaInicio },
-        resultado: 'FAILED'
+        resultado: 'FAILED',
+        ...filtroConjunto
     });
 
     const blocked = await this.countDocuments({
         fecha: { $gte: fechaInicio },
-        resultado: 'BLOCKED'
+        resultado: 'BLOCKED',
+        ...filtroConjunto
     });
 
     return { acciones: stats, intentosFallidos: failed, bloqueados: blocked };
