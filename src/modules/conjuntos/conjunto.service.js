@@ -4,6 +4,7 @@
 const Conjunto = require('./conjunto.model');
 const Usuario = require('../usuarios/usuario.model');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
+const { escaparRegex } = require('../../../utils/regexHelper');
 const Visitante = require('../visitantes/visitante.model');
 
 const crearConjunto = async (datos) => {
@@ -42,7 +43,7 @@ const obtenerConjuntos = async (query = {}) => {
     const filter = {};
     if (query.estado) filter.estado = query.estado;
     if (query.busqueda) {
-        filter.nombre = { $regex: query.busqueda, $options: 'i' };
+        filter.nombre = { $regex: escaparRegex(query.busqueda), $options: 'i' };
     }
 
     const conjuntos = await Conjunto.find(filter)

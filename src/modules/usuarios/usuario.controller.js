@@ -7,6 +7,7 @@ const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { successResponse, errorResponse } = require('../../../utils/responseHandler');
+const { escaparRegex } = require('../../../utils/regexHelper');
 
 // Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
 // temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().
@@ -461,16 +462,18 @@ exports.obtenerUsuarios = async (req, res) => {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 0; // 0 = sin límite (comportamiento original)
         const search = req.query.search?.trim() || '';
+        // Escapar metacaracteres antes de interpolar en $regex (evita ReDoS)
+        const searchSeguro = escaparRegex(search);
         const rol = req.query.rol || 'todos';
 
         // Construir query de búsqueda CON filtro de tenant
         let query = { ...tenantFilter };
         if (search) {
             query.$or = [
-                { nombre: { $regex: search, $options: 'i' } },
-                { apellido: { $regex: search, $options: 'i' } },
-                { cedula: { $regex: search, $options: 'i' } },
-                { placaVehiculo: { $regex: search, $options: 'i' } }
+                { nombre: { $regex: searchSeguro, $options: 'i' } },
+                { apellido: { $regex: searchSeguro, $options: 'i' } },
+                { cedula: { $regex: searchSeguro, $options: 'i' } },
+                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
             ];
             // Si hay búsqueda Y filtro de tenant, necesitamos usar $and
             if (tenantFilter.conjunto) {
@@ -479,10 +482,10 @@ exports.obtenerUsuarios = async (req, res) => {
                         tenantFilter,
                         {
                             $or: [
-                                { nombre: { $regex: search, $options: 'i' } },
-                                { apellido: { $regex: search, $options: 'i' } },
-                                { cedula: { $regex: search, $options: 'i' } },
-                                { placaVehiculo: { $regex: search, $options: 'i' } }
+                                { nombre: { $regex: searchSeguro, $options: 'i' } },
+                                { apellido: { $regex: searchSeguro, $options: 'i' } },
+                                { cedula: { $regex: searchSeguro, $options: 'i' } },
+                                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
                             ]
                         }
                     ]
@@ -506,20 +509,20 @@ exports.obtenerUsuarios = async (req, res) => {
                         tenantFilter,
                         {
                             $or: [
-                                { nombre: { $regex: search, $options: 'i' } },
-                                { apellido: { $regex: search, $options: 'i' } },
-                                { cedula: { $regex: search, $options: 'i' } },
-                                { placaVehiculo: { $regex: search, $options: 'i' } }
+                                { nombre: { $regex: searchSeguro, $options: 'i' } },
+                                { apellido: { $regex: searchSeguro, $options: 'i' } },
+                                { cedula: { $regex: searchSeguro, $options: 'i' } },
+                                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
                             ]
                         }
                     ]
                 };
             } else {
                 visitantesFilter.$or = [
-                    { nombre: { $regex: search, $options: 'i' } },
-                    { apellido: { $regex: search, $options: 'i' } },
-                    { cedula: { $regex: search, $options: 'i' } },
-                    { placaVehiculo: { $regex: search, $options: 'i' } }
+                    { nombre: { $regex: searchSeguro, $options: 'i' } },
+                    { apellido: { $regex: searchSeguro, $options: 'i' } },
+                    { cedula: { $regex: searchSeguro, $options: 'i' } },
+                    { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
                 ];
             }
         }

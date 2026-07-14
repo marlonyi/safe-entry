@@ -6,6 +6,7 @@ const HistorialAcceso = require("../../shared/models/historialAcceso");
 const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
 const Conjunto = require("../conjuntos/conjunto.model");
+const { escaparRegex } = require("../../../utils/regexHelper");
 
 const obtenerPlazas = async (tenantFilter, filtrosAdicionales = {}) => {
     const query = { ...tenantFilter, ...filtrosAdicionales };
@@ -236,7 +237,7 @@ const obtenerHistorial = async (tenantFilter, opciones = {}) => {
     }
     if (tipoAcceso) filtro.tipoAcceso = tipoAcceso;
     if (tipoUsuario) filtro.tipoUsuario = tipoUsuario;
-    if (placa) filtro.placa = { $regex: placa.toUpperCase(), $options: 'i' };
+    if (placa) filtro.placa = { $regex: escaparRegex(placa.toUpperCase()), $options: 'i' };
     if (conjunto) filtro.conjunto = conjunto;
 
     const skip = (Math.max(1, parseInt(page)) - 1) * parseInt(limit);

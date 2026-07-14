@@ -6,6 +6,7 @@ const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
 const Parqueadero = require("../parqueaderos/parqueadero.model");
 const Conjunto = require("../../../models/conjunto");
+const { escaparRegex } = require("../../../utils/regexHelper");
 
 // ===== Definicion de herramientas (tool schemas) =====
 const TOOLS = [
@@ -160,7 +161,7 @@ class ChatbotService {
                 $or: [{ placaVehiculo: placa }, { placa2Vehiculo: placa }]
             }).populate('conjunto', 'nombre').lean(),
             Visitante.findOne({ ...baseF, placaVehiculo: placa }).populate('conjunto', 'nombre').lean(),
-            HistorialAcceso.find({ ...baseF, placa: { $regex: placa, $options: 'i' } })
+            HistorialAcceso.find({ ...baseF, placa: { $regex: escaparRegex(placa), $options: 'i' } })
                 .populate('conjunto', 'nombre')
                 .sort({ fechaHora: -1 }).limit(5).lean()
         ]);
@@ -199,12 +200,12 @@ class ChatbotService {
         if (args.nombre) {
             $and.push({
                 $or: [
-                    { nombre: { $regex: args.nombre, $options: 'i' } },
-                    { apellido: { $regex: args.nombre, $options: 'i' } }
+                    { nombre: { $regex: escaparRegex(args.nombre), $options: 'i' } },
+                    { apellido: { $regex: escaparRegex(args.nombre), $options: 'i' } }
                 ]
             });
         }
-        if (args.cedula) $and.push({ cedula: { $regex: args.cedula, $options: 'i' } });
+        if (args.cedula) $and.push({ cedula: { $regex: escaparRegex(args.cedula), $options: 'i' } });
         if (args.apartamento) $and.push({ apartamento: args.apartamento });
         if (args.torre) $and.push({ torre: args.torre.toUpperCase() });
         if ($and.length) filter.$and = $and;
@@ -234,13 +235,13 @@ class ChatbotService {
         if (args.nombre) {
             $and.push({
                 $or: [
-                    { nombre: { $regex: args.nombre, $options: 'i' } },
-                    { apellido: { $regex: args.nombre, $options: 'i' } }
+                    { nombre: { $regex: escaparRegex(args.nombre), $options: 'i' } },
+                    { apellido: { $regex: escaparRegex(args.nombre), $options: 'i' } }
                 ]
             });
         }
-        if (args.cedula) $and.push({ cedula: { $regex: args.cedula, $options: 'i' } });
-        if (args.placa) $and.push({ placaVehiculo: { $regex: args.placa.toUpperCase(), $options: 'i' } });
+        if (args.cedula) $and.push({ cedula: { $regex: escaparRegex(args.cedula), $options: 'i' } });
+        if (args.placa) $and.push({ placaVehiculo: { $regex: escaparRegex(args.placa.toUpperCase()), $options: 'i' } });
         if ($and.length) filter.$and = $and;
 
         const visitantes = await Visitante.find(filter)
@@ -306,7 +307,7 @@ class ChatbotService {
         filter.fechaHora = { $gte: inicio, $lte: fin };
         if (args.tipoAcceso) filter.tipoAcceso = args.tipoAcceso;
         if (args.tipoUsuario) filter.tipoUsuario = args.tipoUsuario;
-        if (args.placa) filter.placa = { $regex: args.placa.toUpperCase(), $options: 'i' };
+        if (args.placa) filter.placa = { $regex: escaparRegex(args.placa.toUpperCase()), $options: 'i' };
 
         const [total, entradas, salidas, residentes, visitantes, muestra] = await Promise.all([
             HistorialAcceso.countDocuments(filter),
@@ -419,7 +420,7 @@ class ChatbotService {
 
         // Buscar conjunto por nombre (case insensitive, parcial)
         const conjunto = await Conjunto.findOne({
-            nombre: { $regex: nombre, $options: 'i' }
+            nombre: { $regex: escaparRegex(nombre), $options: 'i' }
         }).lean();
 
         if (!conjunto) {
