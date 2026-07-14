@@ -12,7 +12,7 @@ router.post('/', verificarToken, async (req, res) => {
     try {
         const { message } = req.body;
         // Si el middleware verificarToken agrega req.usuario
-        const conjuntoId = req.usuario ? req.usuario.conjunto : null;
+        const conjuntoId = req.usuario ? req.usuario.conjuntoId : null;
         
         if (!message) {
             return res.status(400).json({ error: 'El mensaje es requerido' });
