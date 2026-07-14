@@ -5,7 +5,18 @@ const { models, middlewares, logger } = require('../../index');
 const { Usuario, AuditLog } = models;
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const { successResponse, errorResponse } = require('../../../utils/responseHandler');
+
+// Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
+// temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().
+function generarStringAleatorioSeguro(chars, length) {
+    let resultado = '';
+    for (let i = 0; i < length; i++) {
+        resultado += chars.charAt(crypto.randomInt(chars.length));
+    }
+    return resultado;
+}
 
 // Verificar ambiente
 const isProduction = process.env.NODE_ENV === 'production';
@@ -1095,11 +1106,7 @@ exports.crearAdminRapido = async (req, res) => {
         // Generar contraseña temporal (8 caracteres alfanuméricos)
         const generarPassword = () => {
             const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-            let password = '';
-            for (let i = 0; i < 8; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
-            return password;
+            return generarStringAleatorioSeguro(chars, 8);
         };
 
         const passwordTemporal = generarPassword();
@@ -1431,12 +1438,9 @@ exports.restablecerPassword = async (req, res) => {
         // Si no se proporciona contraseña, generar una temporal
         let password = nuevaPassword;
         if (!password) {
-            // Generar contraseña temporal de 8 caracteres
+            // Generar contraseña temporal de 8 caracteres (cripto-segura)
             const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-            password = '';
-            for (let i = 0; i < 8; i++) {
-                password += chars.charAt(Math.floor(Math.random() * chars.length));
-            }
+            password = generarStringAleatorioSeguro(chars, 8);
         }
 
         // Validar longitud
