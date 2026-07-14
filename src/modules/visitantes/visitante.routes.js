@@ -54,7 +54,7 @@ router.put("/editarVisitante/:visitanteId", verificarToken, visitanteController.
 // Para residentes, usar el flujo TOTP: GET /:visitanteId/codigo-actual
 // luego el visitante verifica con POST /verificar-acceso
 // =======================================================
-router.post("/qr/generar/:visitanteId", async (req, res) => {
+router.post("/qr/generar/:visitanteId", verificarToken, esPorteriaOAdmin, async (req, res) => {
     try {
         const { visitanteId } = req.params;
         const { horasValidez = 24 } = req.body;
