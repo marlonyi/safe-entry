@@ -402,9 +402,22 @@ exports.refreshToken = async (req, res) => {
             return res.status(401).json({ error: "Token inválido" });
         }
 
-        // Generar nuevo access token
+        // Revalidar que el usuario siga existiendo (un usuario borrado no debe
+        // poder seguir refrescando durante los 7 días de vida del refresh token).
+        const usuario = await Usuario.findById(decoded.id).select('rol conjunto');
+        if (!usuario) {
+            return res.status(401).json({ error: "Usuario no encontrado. Inicie sesión nuevamente." });
+        }
+
+        // Generar nuevo access token con datos FRESCOS de BD: preserva conjuntoId
+        // (antes se perdía → tenant filter roto) y aplica cambios de rol/conjunto
+        // hechos por un admin sin esperar a un login completo.
         const newAccessToken = jwt.sign(
-            { id: decoded.id, rol: decoded.rol },
+            {
+                id: usuario._id.toString(),
+                rol: usuario.rol,
+                conjuntoId: usuario.conjunto ? usuario.conjunto.toString() : null
+            },
             JWT_SECRET,
             { expiresIn: "2h" }
         );
