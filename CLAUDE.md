@@ -2,6 +2,17 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Instrucciones del Proyecto: admin_residencial
+
+### Restricciones Críticas de Contexto y Herramientas
+- **REGLA DE ORO:** Antes de utilizar herramientas del sistema como `grep`, `find_files`, `view_file` o leer directorios completos, DEBES utilizar obligatoriamente las herramientas provistas por el servidor MCP `codebase-memory`.
+- Utiliza las consultas del grafo para identificar la ubicación exacta de las funciones, clases, tipos y dependencias del código.
+- Solo tienes permitido leer archivos individuales utilizando herramientas tradicionales si necesitas extraer la lógica exacta interna de una función específica para modificarla o refactorizarla.
+- Está estrictamente prohibido meter estructuras completas de carpetas o archivos enteros en la ventana de contexto si la información se encuentra disponible en el grafo SQLite indexado del MCP.
+
+### Comportamiento del Agente
+- Prioriza el ahorro radical de tokens de entrada utilizando referencias semánticas y mapeo de aristas provisto por `codebase-memory-mcp`.
+
 ## Resumen del Proyecto
 
 SafeEntry / Admin Residencial es un sistema integral de administración residencial con:
@@ -30,11 +41,8 @@ npm run lint             # Ejecutar ESLint
 
 ### Docker
 ```bash
-# Stack completo (backend + frontend + mongo) — para demo local
+# Stack completo (backend + frontend nginx + mongo) — para demo local
 docker compose --env-file .env.docker -f docker-compose.demo.yml up -d --build
-
-# Sólo backend + mongo (apunta al frontend de Vercel)
-docker compose -f docker-compose.yml up -d
 
 # Backend + mongo + LPR (Python con cámara — solo Linux con USB passthrough)
 docker compose -f docker-compose-local.yml up -d
@@ -49,6 +57,8 @@ docker compose --env-file .env.docker -f docker-compose.demo.yml up -d --build
 ```
 
 ⚠️ Si el puerto 80 está ocupado (XAMPP), `docker-compose.demo.yml` mapea el frontend a `8080:80`.
+
+⚠️ No existe un `docker-compose.yml` plano en la raíz — solo `docker-compose.demo.yml` y `docker-compose-local.yml`. El frontend ya no apunta a Vercel dentro de Docker: tiene su propio `frontend/Dockerfile` (multi-stage, sirve el build con nginx vía `frontend/nginx.conf`). El `Dockerfile` del backend en la raíz está en reestructuración — confirma que existe antes de correr `docker-compose.demo.yml` (el servicio `backend` lo referencia con `context: .`).
 
 ### Servicios Python (corren localmente, NO en Docker en Windows)
 ```bash
@@ -67,6 +77,12 @@ node scripts/fix-plazas-atascadas.js   # Libera plazas OCUPADO de visitantes ya 
 node scripts/seed-database.js          # Datos de prueba
 node scripts/migrate-multitenant.js    # Migración a multi-tenant
 ```
+
+⚠️ No hay suite de tests (`npm test` es un stub sin pruebas reales). Verificar cambios corriendo el servidor (`npm run dev`) y probando manualmente los flujos afectados.
+
+## Planes de implementación (`plans/`)
+
+Hay un directorio `plans/` con ~31 planes numerados generados por una auditoría completa del repo (skill `/improve`, commit `e541cd3`). Cada plan es autocontenido (contexto, pasos, criterios de verificación, condiciones de parada) y cubre desde vulnerabilidades P1 (fugas cross-tenant, IDOR, backdoor de login hardcodeado) hasta deuda técnica P3 (directorios legados duplicados, dependencias sin usar). **Antes de investigar un bug o proponer un refactor grande, revisa `plans/README.md`** — puede que ya exista un plan con el análisis y la solución propuesta, incluyendo por qué se descartaron otras alternativas.
 
 ## Arquitectura
 
@@ -88,6 +104,18 @@ src/
 │   └── models/             # HistorialAcceso, AuditLog
 └── index.js                # Barrel: exporta { config, logger, middlewares, models }
 ```
+
+### ⚠️ Directorios legados duplicados en la raíz — NO editar por error
+
+La raíz del repo tiene copias antiguas de código que parecen homólogas a `src/shared/` pero **no se ejecutan nunca** (cero importadores reales en runtime, confirmado por auditoría — ver `plans/020`):
+- `config/`, `middlewares/`, `services/`, `compat.js` (raíz) — código muerto. Edita siempre `src/shared/config/`, `src/shared/middlewares/` o `src/modules/*/*.service.js`, nunca sus homónimos de la raíz.
+
+En cambio, estos SÍ siguen activos (la migración a `src/` está incompleta — ver `plans/021`):
+- `models/auditLog.js` y `models/historialAcceso.js` (raíz) — son los modelos Mongoose reales; `src/shared/models/*.js` son solo shims que los re-exportan.
+- `utils/responseHandler.js` (raíz) — helper real (`successResponse`/`errorResponse`), importado directamente por varios controladores vía `../../../utils/responseHandler`.
+- `models/{conjunto,parqueadero,visitante,usuario}.js` (raíz) — shims que re-exportan hacia `src/modules/*/*.model.js` (dirección correcta, seguros de dejar).
+
+`ml_services/` e `ia_models/` (raíz) tampoco tienen importadores activos — son experimentos huérfanos (predicción con Weka/YOLO), no una integración vigente.
 
 ### Patrón de cada módulo
 ```
@@ -211,7 +239,7 @@ VITE_POWERBI_EMBED_URL=https://app.powerbi.com/view?r=...   # opcional
 
 ### Páginas (`frontend/src/pages/`)
 - `Login.jsx` — Autenticación con selector de conjunto si hay múltiples matches
-- `AdminDashboard.jsx` — Panel admin/superadmin con menú: Dashboard, Conjuntos (solo super), Usuarios, Visitantes, Parqueaderos, Auditoría, **Modelo Matemático**, Simulador Cámaras
+- `AdminDashboard.jsx` — Panel admin/superadmin con menú: Dashboard, Conjuntos (solo super), Usuarios, Visitantes, Parqueaderos, Auditoría, **Modelo Matemático**, Simulador Cámaras. Las vistas del menú viven en `pages/admin/` (`DashboardView`, `UsuariosView`, `VisitantesView`, `ParqueaderosView`, `ConjuntosView`, `AuditoriaView`, `adminHelpers.jsx`)
 - `ResidenteDashboard.jsx` — Mi Hogar, Mis Visitantes (con selector Carro/Moto), Mi Vehículo
 - `PorteroDashboard.jsx` — Panel Principal (con escáner QR navegador + auto-refresh cada 3s), Visitantes, Parqueaderos
 - `VisitanteAcceso.jsx` — Vista pública del visitante con su QR
@@ -222,6 +250,12 @@ VITE_POWERBI_EMBED_URL=https://app.powerbi.com/view?r=...   # opcional
 - `QRScannerComponent.jsx` — Escáner QR usando `html5-qrcode` con cámara del navegador
 - `Logo.jsx` — Logo con variantes (theme dark/light, subtitle dinámico por rol)
 - `Chatbot/ChatbotUI.jsx` — Botón flotante de asistente AI (Groq)
+- `Conjunto3D/` — Simulación 3D del parqueadero con `@react-three/fiber` + `@react-three/drei` (`Escena.jsx`, `Plaza.jsx`, `CarroAnimado.jsx` anima vehículos a lo largo de waypoints en `coordinates.js`)
+- `ui/` — `ConfirmDialog.jsx`, `Toast.jsx`
+- `PowerBIDashboard.jsx` — Embebe el reporte de `VITE_POWERBI_EMBED_URL` vía `powerbi-client-react`
+
+### Data fetching
+- `@tanstack/react-query` se usa en los dashboards (Admin/Portero) y las vistas de admin para fetching con caché/refetch, en vez de `useEffect` manual — revisar patrones existentes en `pages/admin/*View.jsx` antes de añadir una vista nueva.
 
 ### Convenciones del frontend
 - Las respuestas del backend con formato `{ success, data }` se desempacan automáticamente en el interceptor de `api.js` — siempre acceder a `resp.data` directamente
@@ -255,12 +289,10 @@ El módulo `src/modules/modelo/` implementa un modelo de **Programación Lineal*
   - `H` (horas-portero): `count(usuarios.rol='porteria') × 8 × 0.5`
   - `A` (área): suma de plazas actuales × estándar urbanístico
 
-Ver `MODELO_MATEMATICO.md` para la explicación completa del modelo.
-
 ## Limitaciones conocidas
 
 - **Cámara USB en Docker Windows**: no soportada. Los scripts Python (LPR, QR) corren nativamente.
 - **Free tier de Render**: backend duerme después de 15 min de inactividad; ~50s para despertar.
 - **Variables `VITE_*` en Vercel**: requieren redeploy manual al cambiarlas (se incrustan en build).
 - **Visitantes sin vehículo**: por restricción única `(conjunto, placaVehiculo)`, no se pueden tener múltiples visitantes con `placaVehiculo='N/A'` en el mismo conjunto. Usar placa única o `null`.
-- **Modelo de turnos no implementado**: solo está el modelo de distribución de plazas. Si se requiere optimización de turnos de portero, ver `MODELO_MATEMATICO.md` sección Mejoras.
+- **Modelo de turnos no implementado**: solo está el modelo de distribución de plazas (optimización de turnos de portero queda fuera de alcance).
