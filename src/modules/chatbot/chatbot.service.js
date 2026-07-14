@@ -665,9 +665,9 @@ ${resumen}`;
             if (msg.tool_calls && msg.tool_calls.length > 0) {
                 messages.push(msg);
                 for (const call of msg.tool_calls) {
-                    let parsed = {};
+                    let parsed;
                     try { parsed = JSON.parse(call.function.arguments || '{}'); }
-                    catch (e) { parsed = {}; }
+                    catch { parsed = {}; }
                     const result = await this._ejecutarTool(call.function.name, parsed, conjuntoId);
                     messages.push({
                         role: 'tool',
