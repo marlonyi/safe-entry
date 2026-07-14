@@ -365,7 +365,7 @@ router.post("/verificar-acceso", async (req, res) => {
         }
 
         // Buscar visitante por cédula
-        const visitante = await Visitante.findOne({ cedula: cedula.trim() });
+        let visitante = await Visitante.findOne({ cedula: cedula.trim() });
         if (!visitante) {
             return res.status(404).json({
                 success: false,
