@@ -21,7 +21,7 @@ exports.registrarVisitante = async (req, res) => {
             await AuditLog.registrar({
                 usuario: req.usuarioLogueado,
                 accion: 'CREATE_VISITANTE',
-                descripcion: `Registró visitante ${visitante.nombreVisitante} y asignó plaza ${plaza ? plaza.numero : 'ninguna'}`,
+                descripcion: `Registró visitante ${visitante.nombre} ${visitante.apellido} y asignó plaza ${plaza ? plaza.numero : 'ninguna'}`,
                 recurso: { tipo: 'visitante', id: visitante._id.toString() }
             });
         }
@@ -68,7 +68,7 @@ exports.eliminarVisitante = async (req, res) => {
             await AuditLog.registrar({
                 usuario: req.usuarioLogueado,
                 accion: 'DELETE_VISITANTE',
-                descripcion: `Eliminó visitante ${visitante.nombreVisitante} y liberó plaza ${plaza ? plaza.numero : 'N/A'}`,
+                descripcion: `Eliminó visitante ${visitante.nombre} ${visitante.apellido} y liberó plaza ${plaza ? plaza.numero : 'N/A'}`,
                 recurso: { tipo: 'visitante', id: visitante._id.toString() }
             });
         }
@@ -90,7 +90,7 @@ exports.editarVisitante = async (req, res) => {
             await AuditLog.registrar({
                 usuario: req.usuarioLogueado,
                 accion: 'UPDATE_VISITANTE',
-                descripcion: `Actualizó visitante ${actualizado.nombreVisitante}`,
+                descripcion: `Actualizó visitante ${actualizado.nombre} ${actualizado.apellido}`,
                 recurso: { tipo: 'visitante', id: actualizado._id.toString() }
             });
         }

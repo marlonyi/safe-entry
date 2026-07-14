@@ -395,8 +395,10 @@ async function iniciarHeartbeat() {
             const plazasStats = {
                 total: plazas.length,
                 ocupadas: plazas.filter(p => p.estado === 'OCUPADO').length,
-                libres: plazas.filter(p => p.estado === 'LIBRE').length,
-                enEspera: plazas.filter(p => p.estado === 'EN_ESPERA').length
+                libres: plazas.filter(p => p.estado === 'DISPONIBLE').length,
+                // 'EN_ESPERA' no existe en el enum del schema (DISPONIBLE|OCUPADO|RESERVADO);
+                // se deja en 0 (la clave existe en instalacion.model.js) hasta resolver plan 011.
+                enEspera: 0
             };
 
             // Estadísticas de accesos
@@ -408,11 +410,11 @@ async function iniciarHeartbeat() {
 
             let accesosStats = { hoy: 0, semana: 0, mes: 0 };
             try {
-                accesosStats.hoy = await HistorialAcceso.countDocuments({ fecha: { $gte: hoy } });
-                accesosStats.semana = await HistorialAcceso.countDocuments({ fecha: { $gte: inicioSemana } });
-                accesosStats.mes = await HistorialAcceso.countDocuments({ fecha: { $gte: inicioMes } });
+                accesosStats.hoy = await HistorialAcceso.countDocuments({ fechaHora: { $gte: hoy } });
+                accesosStats.semana = await HistorialAcceso.countDocuments({ fechaHora: { $gte: inicioSemana } });
+                accesosStats.mes = await HistorialAcceso.countDocuments({ fechaHora: { $gte: inicioMes } });
             } catch (e) {
-                // HistorialAcceso podría no existir
+                logger.warn('⚠️ Error contando accesos para heartbeat:', { error: e.message });
             }
 
             // Estado de salud
