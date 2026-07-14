@@ -42,23 +42,37 @@ const usuarioSchema = new mongoose.Schema({
     // ========== QR DE ACCESO PARA RESIDENTES ==========
     qrAcceso: {
         token: { type: String, default: null },
-        fechaGeneracion: { type: Date, default: null }
+        fechaGeneracion: { type: Date, default: null },
+        fechaExpiracion: { type: Date, default: null }
     }
 }, {
     timestamps: true
 });
 
 // ========== MÉTODO PARA GENERAR QR DE ACCESO ==========
-usuarioSchema.methods.generarQRAcceso = function () {
+// El QR del residente es una credencial de acceso de larga duración (por
+// defecto 90 días); regenerarla renueva el token y la expiración.
+usuarioSchema.methods.generarQRAcceso = function (diasValidez = 90) {
     // Token único de 32 caracteres
     this.qrAcceso.token = crypto.randomBytes(16).toString('hex');
     this.qrAcceso.fechaGeneracion = new Date();
+    this.qrAcceso.fechaExpiracion = new Date(Date.now() + diasValidez * 24 * 60 * 60 * 1000);
     return this.qrAcceso.token;
 };
 
 // ========== MÉTODO ESTÁTICO PARA BUSCAR POR QR ==========
+// Rechaza tokens expirados. Los QR generados antes de introducir la
+// expiración (fechaExpiracion ausente/null) se toleran (grandfathering) para
+// no romper de golpe el acceso de residentes existentes hasta que regeneren.
 usuarioSchema.statics.buscarPorQR = function (token) {
-    return this.findOne({ 'qrAcceso.token': token }).populate('conjunto', 'nombre');
+    return this.findOne({
+        'qrAcceso.token': token,
+        $or: [
+            { 'qrAcceso.fechaExpiracion': { $gt: new Date() } },
+            { 'qrAcceso.fechaExpiracion': null },
+            { 'qrAcceso.fechaExpiracion': { $exists: false } }
+        ]
+    }).populate('conjunto', 'nombre');
 };
 
 // ========== VALIDACIÓN DE PLACA COLOMBIANA ==========

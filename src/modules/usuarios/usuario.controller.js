@@ -1278,6 +1278,7 @@ exports.generarQRAcceso = async (req, res) => {
                 token: usuario.qrAcceso.token,
                 url: qrUrl,
                 fechaGeneracion: usuario.qrAcceso.fechaGeneracion,
+                fechaExpiracion: usuario.qrAcceso.fechaExpiracion,
                 usuario: {
                     nombre: `${usuario.nombre} ${usuario.apellido}`,
                     cedula: usuario.cedula,
@@ -1322,7 +1323,8 @@ exports.regenerarQRAcceso = async (req, res) => {
             qr: {
                 token: usuario.qrAcceso.token,
                 url: qrUrl,
-                fechaGeneracion: usuario.qrAcceso.fechaGeneracion
+                fechaGeneracion: usuario.qrAcceso.fechaGeneracion,
+                fechaExpiracion: usuario.qrAcceso.fechaExpiracion
             }
         });
     } catch (error) {
@@ -1347,6 +1349,8 @@ exports.verificarQRAcceso = async (req, res) => {
             });
         }
 
+        // Respuesta PÚBLICA (sin auth): solo lo mínimo para que el portero
+        // confirme identidad visualmente. NO se exponen cédula ni placa.
         res.json({
             valid: true,
             mensaje: "Residente autorizado",
@@ -1354,10 +1358,8 @@ exports.verificarQRAcceso = async (req, res) => {
                 id: usuario._id,
                 nombre: usuario.nombre,
                 apellido: usuario.apellido,
-                cedula: usuario.cedula,
                 apartamento: usuario.apartamento,
                 torre: usuario.torre,
-                placa: usuario.placaVehiculo,
                 conjunto: usuario.conjunto?.nombre || 'Sin asignar',
                 fechaQR: usuario.qrAcceso.fechaGeneracion
             }
