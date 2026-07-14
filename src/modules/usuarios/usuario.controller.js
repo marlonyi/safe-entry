@@ -226,18 +226,6 @@ exports.loginUsuario = async (req, res) => {
         const usuarios = await Usuario.find({ cedula }).populate('conjunto', 'nombre estado');
 
         if (usuarios.length === 0) {
-            // También verificar login de admin hardcoded (legacy)
-            if (cedula === ADMIN_CEDULA && password === ADMIN_PASSWORD) {
-                const { accessToken, refreshToken } = generateTokens({
-                    id: "admin",
-                    rol: "superadmin",
-                    conjuntoId: null // SuperAdmin no tiene conjunto
-                });
-                resetLoginAttempts(req);
-                await audit.loginSuccess(req, { ...ADMIN_INFO, rol: 'superadmin' });
-                return successResponse(res, { token: accessToken, refreshToken, expiresIn: 7200, usuario: { ...ADMIN_INFO, rol: "superadmin" } }, "Login exitoso");
-            }
-
             const result = recordFailedLogin(req);
             await audit.loginFailed(req, cedula, 'Usuario no encontrado');
             return res.status(400).json({
