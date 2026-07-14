@@ -1,12 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { jwtDecode } from 'jwt-decode';
 import Login from './pages/Login';
-import AdminDashboard from './pages/AdminDashboard';
-import PorteroDashboard from './pages/PorteroDashboard';
-import ResidenteDashboard from './pages/ResidenteDashboard';
-import VisitanteAcceso from './pages/VisitanteAcceso';
 import ChatbotUI from './components/Chatbot/ChatbotUI';
 import api from './services/api';
+
+// Code splitting: cada dashboard (y la vista pública de visitante) se carga en
+// su propio chunk bajo demanda, no en el bundle inicial. Login queda eager
+// porque está en la ruta crítica del primer render.
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const PorteroDashboard = lazy(() => import('./pages/PorteroDashboard'));
+const ResidenteDashboard = lazy(() => import('./pages/ResidenteDashboard'));
+const VisitanteAcceso = lazy(() => import('./pages/VisitanteAcceso'));
+
+const SuspenseFallback = (
+  <div className="min-h-screen bg-slate-50 flex items-center justify-center text-slate-500 font-medium">Cargando...</div>
+);
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -64,7 +72,11 @@ function App() {
   }
 
   if (visitanteMode) {
-    return <VisitanteAcceso onBack={() => setVisitanteMode(false)} />;
+    return (
+      <Suspense fallback={SuspenseFallback}>
+        <VisitanteAcceso onBack={() => setVisitanteMode(false)} />
+      </Suspense>
+    );
   }
 
   if (!isAuthenticated) {
@@ -84,16 +96,18 @@ function App() {
       {/* Chatbot Global Component */}
       <ChatbotUI />
 
-      {/* Renderizado Condicional del Dashboard según el Rol */}       
-      <div className="w-full h-full">
-        {role === 'superadmin' || role === 'admin' ? (
-           <AdminDashboard user={user} />
-        ) : role === 'porteria' || role === 'portero' ? (
-           <PorteroDashboard user={user} />
-        ) : (
-           <ResidenteDashboard user={user} />
-        )}
-      </div>
+      {/* Renderizado Condicional del Dashboard según el Rol */}
+      <Suspense fallback={SuspenseFallback}>
+        <div className="w-full h-full">
+          {role === 'superadmin' || role === 'admin' ? (
+             <AdminDashboard user={user} />
+          ) : role === 'porteria' || role === 'portero' ? (
+             <PorteroDashboard user={user} />
+          ) : (
+             <ResidenteDashboard user={user} />
+          )}
+        </div>
+      </Suspense>
     </div>
   );
 }

@@ -1,11 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { ShieldCheck, UserCheck, MonitorPlay, Car, AlertTriangle, ArrowRightCircle, Clock, QrCode, Menu, ChevronLeft, ChevronRight, Box } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import api from '../services/api';
 import Logo from '../components/Logo';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { useToast } from '../components/ui/Toast';
-import Conjunto3D from '../components/Conjunto3D/Conjunto3D';
+// Simulación 3D en su propio chunk: arrastra @react-three/fiber+drei+three
+// (motor 3D pesado), que no debe entrar en el bundle de la portería salvo al
+// mostrarse el panel.
+const Conjunto3D = lazy(() => import('../components/Conjunto3D/Conjunto3D'));
 
 export default function PorteroDashboard({ user }) {
   const { showToast, ToastContainer } = useToast();
@@ -49,16 +52,16 @@ export default function PorteroDashboard({ user }) {
   const { data: visitantes = [], isError: visitantesError, isLoading: visitantesLoading } = useQuery({
     queryKey: ['porteriaVisitantes'],
     queryFn: async () => unwrap(await api.get('/visitantes')),
-    refetchInterval: () => (!document.hidden ? 3000 : false),
-    staleTime: 0,
+    refetchInterval: () => (!document.hidden ? 10000 : false),
+    staleTime: 5000,
     retry: 2,
   });
 
   const { data: historial = [] } = useQuery({
     queryKey: ['porteriaHistorial'],
     queryFn: async () => unwrap(await api.get('/parqueaderos/historial?limit=20&page=1').catch(() => ({ data: [] }))),
-    refetchInterval: () => (!document.hidden ? 3000 : false),
-    staleTime: 0,
+    refetchInterval: () => (!document.hidden ? 10000 : false),
+    staleTime: 5000,
   });
 
   const { data: statsHist = {} } = useQuery({
@@ -67,8 +70,8 @@ export default function PorteroDashboard({ user }) {
       const res = await api.get('/parqueaderos/historial/estadisticas').catch(() => ({ data: {} }));
       return res.data || {};
     },
-    refetchInterval: () => (!document.hidden ? 3000 : false),
-    staleTime: 0,
+    refetchInterval: () => (!document.hidden ? 15000 : false),
+    staleTime: 10000,
   });
 
   const { data: parqueaderos = [], isFetching: parkLoading, isError: parqueaderosError } = useQuery({
@@ -200,7 +203,9 @@ export default function PorteroDashboard({ user }) {
             </span>
           </div>
           <div style={{ padding: '0.75rem' }}>
-            <Conjunto3D parqueaderos={parqueaderos} historial={historial} />
+            <Suspense fallback={<div style={{ padding: '2rem', textAlign: 'center', color: 'var(--se-text-muted)', fontSize: '0.85rem' }}>Cargando simulación 3D…</div>}>
+              <Conjunto3D parqueaderos={parqueaderos} historial={historial} />
+            </Suspense>
           </div>
         </div>
 
