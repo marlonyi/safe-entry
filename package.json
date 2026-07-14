@@ -7,7 +7,7 @@
     "start": "node server.js",
     "dev": "set NODE_ENV=development && node server.js",
     "prod": "set NODE_ENV=production && node server.js",
-    "test": "echo \"No tests specified\"",
+    "test": "jest",
     "generate-secret": "node -e \"console.log('JWT_SECRET=' + require('crypto').randomBytes(64).toString('hex'))\""
   },
   "keywords": [
@@ -34,5 +34,10 @@
     "mysql2": "^3.15.3",
     "node-fetch": "^3.3.2",
     "winston": "^3.19.0"
+  },
+  "devDependencies": {
+    "jest": "^30.4.2",
+    "mongodb-memory-server": "^11.2.0",
+    "supertest": "^7.2.2"
   }
 }
