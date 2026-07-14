@@ -7,19 +7,24 @@ const Parqueadero = require('../parqueaderos/parqueadero.model');
 const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
     let { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante, residenteId, tipoVehiculo } = data;
 
-    if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante || !placaVisitante) {
-        throw new Error("Todos los campos son obligatorios: nombre, apellido, cédula y placa");
+    if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante) {
+        throw new Error("Nombre, apellido y cédula son obligatorios");
     }
 
     if (residenteId === "admin") {
         residenteId = null;
     }
 
+    // Visitante sin vehículo: se guarda placa null (no la cadena 'N/A') para no
+    // colisionar en el índice único parcial (conjunto, placaVehiculo).
+    const placaNormalizada = (placaVisitante && placaVisitante.toUpperCase() !== 'N/A' && placaVisitante.trim() !== '')
+        ? placaVisitante.toUpperCase()
+        : null;
+
     // Determinar tipo de vehículo basado en la placa si no se especifica
-    if (!tipoVehiculo) {
+    if (!tipoVehiculo && placaNormalizada) {
         // Placas de moto en Colombia suelen tener formato: ABC12 o ABC12D (terminan en letra)
-        const placaUpper = placaVisitante.toUpperCase();
-        if (placaUpper.length <= 5 || /^[A-Z]{3}[0-9]{2}[A-Z]?$/.test(placaUpper)) {
+        if (placaNormalizada.length <= 5 || /^[A-Z]{3}[0-9]{2}[A-Z]?$/.test(placaNormalizada)) {
             tipoVehiculo = 'MOTO';
         } else {
             tipoVehiculo = 'CARRO';
@@ -28,7 +33,7 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
 
     let plaza = null;
 
-    if (placaVisitante && placaVisitante.toUpperCase() !== 'N/A') {
+    if (placaNormalizada) {
         // Buscar parqueadero disponible para visitantes del tipo de vehículo correspondiente
         plaza = await Parqueadero.findOne({
             ...tenantFilter,
@@ -51,7 +56,7 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
         nombre: nombreVisitante,
         apellido: apellidoVisitante,
         cedula: cedulaVisitante,
-        placaVehiculo: placaVisitante,
+        placaVehiculo: placaNormalizada,
         residenteId,
         parqueadero: plaza ? plaza._id : null,
         conjunto: conjuntoId
@@ -63,7 +68,7 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
         plaza.visitante = nuevoVisitante._id;
         plaza.estado = "OCUPADO";
         plaza.horaAsignacion = new Date();
-        plaza.placaVehiculo = placaVisitante;
+        plaza.placaVehiculo = placaNormalizada;
         await plaza.save();
     }
 
@@ -102,9 +107,13 @@ const eliminarVisitante = async (id, tenantFilter) => {
 const editarVisitante = async (id, updateData, tenantFilter) => {
     const { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante } = updateData;
 
-    if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante || !placaVisitante) {
-        throw new Error("Todos los campos son obligatorios");
+    if (!nombreVisitante || !apellidoVisitante || !cedulaVisitante) {
+        throw new Error("Nombre, apellido y cédula son obligatorios");
     }
+
+    const placaNormalizada = (placaVisitante && placaVisitante.toUpperCase() !== 'N/A' && placaVisitante.trim() !== '')
+        ? placaVisitante.toUpperCase()
+        : null;
 
     const visitante = await Visitante.findOne({ _id: id, ...tenantFilter });
     if (!visitante) throw new Error("Visitante no encontrado");
@@ -113,7 +122,7 @@ const editarVisitante = async (id, updateData, tenantFilter) => {
         nombre: nombreVisitante,
         apellido: apellidoVisitante,
         cedula: cedulaVisitante,
-        placaVehiculo: placaVisitante
+        placaVehiculo: placaNormalizada
     });
     return await visitante.save();
 };

@@ -29,6 +29,9 @@ exports.registrarVisitante = async (req, res) => {
         return successResponse(res, visitante, "Visitante registrado y parqueadero asignado", 201);
     } catch (error) {
         logger.error('Error al registrar visitante:', error.message);
+        if (error.code === 11000) {
+            return errorResponse(res, "Ya existe un visitante registrado con esa placa en este conjunto", 409);
+        }
         return errorResponse(res, error.message, 400);
     }
 };

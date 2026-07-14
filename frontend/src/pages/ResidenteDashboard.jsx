@@ -119,7 +119,7 @@ export default function ResidenteDashboard({ user }) {
         nombreVisitante: nuevoVisitante.nombre,
         apellidoVisitante: nuevoVisitante.apellido,
         cedulaVisitante: nuevoVisitante.cedula,
-        placaVisitante: nuevoVisitante.placaVehiculo || 'N/A',
+        placaVisitante: nuevoVisitante.placaVehiculo || null,
         residenteId: user.id
       });
       const creado = resp.data?.visitante || resp.data;

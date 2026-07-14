@@ -13,7 +13,7 @@ const visitanteSchema = new mongoose.Schema({
   nombre: { type: String, required: true },
   apellido: { type: String, required: true },
   cedula: { type: String, required: true },
-  placaVehiculo: { type: String, required: true },
+  placaVehiculo: { type: String, default: null },
   residenteId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Usuario",
@@ -62,7 +62,12 @@ const visitanteSchema = new mongoose.Schema({
 
 // ========== ÍNDICES PARA MULTI-TENANT ==========
 visitanteSchema.index({ conjunto: 1, cedula: 1 }, { unique: true });
-visitanteSchema.index({ conjunto: 1, placaVehiculo: 1 }, { unique: true });
+// Único por conjunto SOLO para placas reales (string). Los visitantes sin
+// vehículo guardan placaVehiculo=null y no colisionan entre sí.
+visitanteSchema.index(
+    { conjunto: 1, placaVehiculo: 1 },
+    { unique: true, partialFilterExpression: { placaVehiculo: { $type: "string" } } }
+);
 visitanteSchema.index({ conjunto: 1, residenteId: 1, createdAt: -1 });
 visitanteSchema.index({ conjunto: 1, estado: 1 });
 

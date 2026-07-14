@@ -37,22 +37,37 @@ describe('registrarVisitante', () => {
         expect(plazaRecargada.visitante.toString()).toBe(visitante._id.toString());
     });
 
-    // CARACTERIZACIÓN: con placaVehiculo='N/A' no se asigna plaza, pero el índice
-    // único {conjunto, placaVehiculo} impide tener dos visitantes 'N/A' en el mismo
-    // conjunto → el segundo registro colisiona con E11000. BUG documentado — lo
-    // aborda el plan 013 (placa única o null en vez de 'N/A').
-    test('dos visitantes con placa N/A en el mismo conjunto colisionan en el índice único (BUG, plan 013)', async () => {
+    // Plan 013: con placa 'N/A'/vacía se guarda placaVehiculo=null y el índice único
+    // es parcial (solo strings), por lo que varios visitantes sin vehículo conviven.
+    test('dos visitantes sin vehículo (placa N/A) se registran OK y quedan con placaVehiculo null', async () => {
+        const conjunto = await crearConjunto();
+        const tenantFilter = { conjunto: conjunto._id };
+
+        const r1 = await visitanteService.registrarVisitante(
+            { nombreVisitante: 'A', apellidoVisitante: 'A', cedulaVisitante: '1', placaVisitante: 'N/A' },
+            conjunto._id, tenantFilter
+        );
+        const r2 = await visitanteService.registrarVisitante(
+            { nombreVisitante: 'B', apellidoVisitante: 'B', cedulaVisitante: '2', placaVisitante: '' },
+            conjunto._id, tenantFilter
+        );
+
+        expect(r1.visitante.placaVehiculo).toBeNull();
+        expect(r2.visitante.placaVehiculo).toBeNull();
+    });
+
+    test('dos visitantes con la MISMA placa real en el conjunto sí colisionan (E11000)', async () => {
         const conjunto = await crearConjunto();
         const tenantFilter = { conjunto: conjunto._id };
 
         await visitanteService.registrarVisitante(
-            { nombreVisitante: 'A', apellidoVisitante: 'A', cedulaVisitante: '1', placaVisitante: 'N/A' },
+            { nombreVisitante: 'A', apellidoVisitante: 'A', cedulaVisitante: '1', placaVisitante: 'ABC123' },
             conjunto._id, tenantFilter
         );
 
         await expect(
             visitanteService.registrarVisitante(
-                { nombreVisitante: 'B', apellidoVisitante: 'B', cedulaVisitante: '2', placaVisitante: 'N/A' },
+                { nombreVisitante: 'B', apellidoVisitante: 'B', cedulaVisitante: '2', placaVisitante: 'ABC123' },
                 conjunto._id, tenantFilter
             )
         ).rejects.toThrow(/E11000|duplicate key/);
