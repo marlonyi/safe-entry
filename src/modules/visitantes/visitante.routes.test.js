@@ -3,6 +3,7 @@ const request = require('supertest');
 const { connect, closeDatabase, clearDatabase } = require('../../shared/testing/setupTestDb');
 const Visitante = require('./visitante.model');
 const Conjunto = require('../conjuntos/conjunto.model');
+const Parqueadero = require('../parqueaderos/parqueadero.model');
 const visitanteRoutes = require('./visitante.routes');
 
 let app;
@@ -67,5 +68,35 @@ describe('POST /verificar-acceso', () => {
             .post('/api/visitantes/verificar-acceso')
             .send({ cedula: '999' });
         expect(res.status).toBe(400);
+    });
+});
+
+describe('POST /qr/salida/:token', () => {
+    // Plan 011: la salida por QR ahora libera la plaza asociada (antes quedaba
+    // OCUPADA para siempre con una referencia colgante al visitante que ya salió).
+    test('registra la salida y libera la plaza asociada (vuelve a DISPONIBLE)', async () => {
+        const plaza = await Parqueadero.create({
+            conjunto: conjunto._id, numero: 'V9', categoria: 'VISITANTE',
+            tipoVehiculo: 'CARRO', estado: 'OCUPADO', placaVehiculo: 'ABC123',
+        });
+        const visitante = await Visitante.create({
+            nombre: 'Ana', apellido: 'Gómez', cedula: '111', placaVehiculo: 'ABC123',
+            conjunto: conjunto._id, estado: 'ingresado', parqueadero: plaza._id,
+            qrToken: 'token-salida', qrExpiracion: new Date(Date.now() + 60 * 60 * 1000),
+        });
+        plaza.visitante = visitante._id;
+        await plaza.save();
+
+        const res = await request(app).post('/api/visitantes/qr/salida/token-salida');
+
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        const plazaRecargada = await Parqueadero.findById(plaza._id);
+        expect(plazaRecargada.estado).toBe('DISPONIBLE');
+        expect(plazaRecargada.visitante).toBeNull();
+
+        const visitanteRecargado = await Visitante.findById(visitante._id);
+        expect(visitanteRecargado.estado).toBe('salido');
     });
 });

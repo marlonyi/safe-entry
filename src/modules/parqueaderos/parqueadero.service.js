@@ -109,7 +109,9 @@ const asignarVisitante = async (visitanteId, tipoVehiculo = "CARRO", tenantFilte
         throw new Error("No hay parqueaderos disponibles para visitantes");
     }
 
-    plaza.estado = "EN_ESPERA";
+    // RESERVADO: plaza apartada para el visitante (aún no ocupada físicamente).
+    // Es un valor real del enum del schema y la UI (Plaza.jsx) ya lo representa.
+    plaza.estado = "RESERVADO";
     plaza.visitante = visitanteId;
     await plaza.save();
 
@@ -538,11 +540,11 @@ const editarPlaza = async (plazaId, datosActualizacion, tenantFilter) => {
     }
 
     if (estado) {
-        const estadosValidos = ["DISPONIBLE", "OCUPADO", "EN_ESPERA", "MANTENIMIENTO"];
+        const estadosValidos = ["DISPONIBLE", "OCUPADO", "RESERVADO"];
         if (!estadosValidos.includes(estado)) throw new Error("Estado inválido");
         plaza.estado = estado;
 
-        if (estado === "DISPONIBLE" || estado === "MANTENIMIENTO") {
+        if (estado === "DISPONIBLE") {
             plaza.visitante = null;
             plaza.placaVehiculo = null;
         }

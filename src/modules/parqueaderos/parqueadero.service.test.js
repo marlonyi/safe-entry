@@ -1,3 +1,4 @@
+const mongoose = require('mongoose');
 const { connect, closeDatabase, clearDatabase } = require('../../shared/testing/setupTestDb');
 const Parqueadero = require('./parqueadero.model');
 const Conjunto = require('../conjuntos/conjunto.model');
@@ -13,20 +14,23 @@ const crearConjunto = () =>
     Conjunto.create({ nombre: 'Test', direccion: 'x', ciudad: 'x', estado: 'activo' });
 
 describe('asignarVisitante', () => {
-    // CARACTERIZACIÓN: asignarVisitante fija estado="EN_ESPERA", valor que NO existe
-    // en el enum del schema Parqueadero (["DISPONIBLE","OCUPADO","RESERVADO"]) →
-    // plaza.save() lanza ValidationError. BUG documentado — lo arregla el plan 011.
-    test('lanza ValidationError porque EN_ESPERA no está en el enum (BUG, plan 011)', async () => {
+    // Tras el plan 011, asignarVisitante fija estado="RESERVADO" (valor real del
+    // enum) en vez del inexistente "EN_ESPERA"; ya no lanza ValidationError.
+    test('asigna una plaza VISITANTE disponible y la deja RESERVADO', async () => {
         const conjunto = await crearConjunto();
-        await Parqueadero.create({
+        const plaza = await Parqueadero.create({
             conjunto: conjunto._id, numero: 'V1', categoria: 'VISITANTE',
             tipoVehiculo: 'CARRO', estado: 'DISPONIBLE',
         });
         const tenantFilter = { conjunto: conjunto._id };
+        const visitanteId = new mongoose.Types.ObjectId();
 
-        await expect(
-            parqueaderoService.asignarVisitante(null, 'CARRO', tenantFilter)
-        ).rejects.toThrow();
+        const result = await parqueaderoService.asignarVisitante(visitanteId, 'CARRO', tenantFilter);
+        expect(result.estado).toBe('RESERVADO');
+        expect(result.visitante.toString()).toBe(visitanteId.toString());
+
+        const recargada = await Parqueadero.findById(plaza._id);
+        expect(recargada.estado).toBe('RESERVADO');
     });
 
     test('lanza "No hay parqueaderos disponibles" cuando no hay plaza libre', async () => {

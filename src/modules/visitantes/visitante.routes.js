@@ -339,6 +339,17 @@ router.post("/qr/salida/:token", async (req, res) => {
         visitante.qrExpiracion = null;
         await visitante.save();
 
+        // 🅿️ Liberar la plaza asociada (antes quedaba OCUPADA para siempre)
+        if (visitante.parqueadero) {
+            const plaza = await Parqueadero.findById(visitante.parqueadero);
+            if (plaza) {
+                plaza.estado = 'DISPONIBLE';
+                plaza.visitante = null;
+                plaza.placaVehiculo = null;
+                await plaza.save();
+            }
+        }
+
         res.json({
             success: true,
             mensaje: `Salida registrada para ${visitante.nombre} ${visitante.apellido}`,
