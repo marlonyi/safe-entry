@@ -527,8 +527,10 @@ exports.obtenerUsuarios = async (req, res) => {
             }
         }
 
-        // Usar Promise.all para queries paralelas y .lean() para mejor rendimiento
-        let usuariosQuery = Usuario.find(query, '-password -__v').populate('conjunto', 'nombre');
+        // Usar Promise.all para queries paralelas y .lean() para mejor rendimiento.
+        // Se excluye fotoPerfil (base64 de hasta ~2.8MB por usuario) del listado:
+        // la foto se obtiene en la vista de perfil individual, no en la lista.
+        let usuariosQuery = Usuario.find(query, '-password -__v -fotoPerfil').populate('conjunto', 'nombre');
         let visitantesQuery = Visitante.find(visitantesFilter, '-__v').populate('conjunto', 'nombre');
 
         // Aplicar paginación si se especifica límite

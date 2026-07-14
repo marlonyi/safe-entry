@@ -400,16 +400,25 @@ async function iniciarHeartbeat() {
                 usuariosStats.total += u.count;
             });
 
-            // Estadísticas de parqueaderos
-            const plazas = await Parqueadero.find();
+            // Estadísticas de parqueaderos vía aggregation (no hidratar todos los
+            // documentos de todas las plazas solo para contar). Igual patrón que
+            // el $group de usuarios de arriba.
+            const plazasAgregadas = await Parqueadero.aggregate([
+                { $group: { _id: "$estado", count: { $sum: 1 } } }
+            ]);
             const plazasStats = {
-                total: plazas.length,
-                ocupadas: plazas.filter(p => p.estado === 'OCUPADO').length,
-                libres: plazas.filter(p => p.estado === 'DISPONIBLE').length,
+                total: 0,
+                ocupadas: 0,
+                libres: 0,
                 // 'EN_ESPERA' no existe en el enum del schema (DISPONIBLE|OCUPADO|RESERVADO);
-                // se deja en 0 (la clave existe en instalacion.model.js) hasta resolver plan 011.
+                // se deja en 0 (la clave existe en instalacion.model.js).
                 enEspera: 0
             };
+            plazasAgregadas.forEach(p => {
+                plazasStats.total += p.count;
+                if (p._id === 'OCUPADO') plazasStats.ocupadas = p.count;
+                if (p._id === 'DISPONIBLE') plazasStats.libres = p.count;
+            });
 
             // Estadísticas de accesos
             const hoy = new Date();
