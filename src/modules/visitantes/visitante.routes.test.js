@@ -99,4 +99,33 @@ describe('POST /qr/salida/:token', () => {
         const visitanteRecargado = await Visitante.findById(visitante._id);
         expect(visitanteRecargado.estado).toBe('salido');
     });
+
+    // Plan 012: dos salidas concurrentes no deben romper ni liberar dos veces.
+    test('dos salidas por QR concurrentes: sin error y plaza liberada una sola vez', async () => {
+        const plaza = await Parqueadero.create({
+            conjunto: conjunto._id, numero: 'V10', categoria: 'VISITANTE',
+            tipoVehiculo: 'CARRO', estado: 'OCUPADO', placaVehiculo: 'ABC123',
+        });
+        const visitante = await Visitante.create({
+            nombre: 'Ana', apellido: 'Gómez', cedula: '111', placaVehiculo: 'ABC123',
+            conjunto: conjunto._id, estado: 'ingresado', parqueadero: plaza._id,
+            qrToken: 'tok-concurrente', qrExpiracion: new Date(Date.now() + 60 * 60 * 1000),
+        });
+        plaza.visitante = visitante._id;
+        await plaza.save();
+
+        const [r1, r2] = await Promise.all([
+            request(app).post('/api/visitantes/qr/salida/tok-concurrente'),
+            request(app).post('/api/visitantes/qr/salida/tok-concurrente'),
+        ]);
+
+        expect(r1.status).toBeLessThan(500);
+        expect(r2.status).toBeLessThan(500);
+
+        const v = await Visitante.findById(visitante._id);
+        expect(v.estado).toBe('salido');
+        const p = await Parqueadero.findById(plaza._id);
+        expect(p.estado).toBe('DISPONIBLE');
+        expect(p.visitante).toBeNull();
+    });
 });

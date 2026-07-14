@@ -333,26 +333,29 @@ router.post("/qr/salida/:token", async (req, res) => {
             });
         }
 
-        visitante.estado = 'salido';
-        // Invalidar QR después de salir
-        visitante.qrToken = null;
-        visitante.qrExpiracion = null;
-        await visitante.save();
+        // Transición ATÓMICA: solo una request concurrente pasa de !salido→salido.
+        const visitanteActualizado = await Visitante.findOneAndUpdate(
+            { _id: visitante._id, estado: { $ne: 'salido' } },
+            { $set: { estado: 'salido', qrToken: null, qrExpiracion: null } },
+            { new: true }
+        );
 
-        // 🅿️ Liberar la plaza asociada (antes quedaba OCUPADA para siempre)
-        if (visitante.parqueadero) {
-            const plaza = await Parqueadero.findById(visitante.parqueadero);
-            if (plaza) {
-                plaza.estado = 'DISPONIBLE';
-                plaza.visitante = null;
-                plaza.placaVehiculo = null;
-                await plaza.save();
-            }
+        if (!visitanteActualizado) {
+            // Otra request concurrente ya registró la salida → responder idempotente.
+            return res.status(200).json({ success: true, mensaje: 'Salida ya estaba registrada' });
+        }
+
+        // 🅿️ Liberar la plaza asociada (antes quedaba OCUPADA para siempre).
+        // Solo la request que ganó la transición llega aquí.
+        if (visitanteActualizado.parqueadero) {
+            await Parqueadero.findByIdAndUpdate(visitanteActualizado.parqueadero, {
+                $set: { estado: 'DISPONIBLE', visitante: null, placaVehiculo: null }
+            });
         }
 
         res.json({
             success: true,
-            mensaje: `Salida registrada para ${visitante.nombre} ${visitante.apellido}`,
+            mensaje: `Salida registrada para ${visitanteActualizado.nombre} ${visitanteActualizado.apellido}`,
             hora: new Date().toISOString()
         });
     } catch (error) {

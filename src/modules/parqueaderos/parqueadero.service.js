@@ -89,14 +89,20 @@ const obtenerEstadisticas = async (tenantFilter) => {
 
 // Asignar parqueadero a visitante (filtrando por tipo de vehículo)
 const asignarVisitante = async (visitanteId, tipoVehiculo = "CARRO", tenantFilter) => {
-    const plaza = await Parqueadero.findOne({
-        ...tenantFilter,
-        estado: "DISPONIBLE",
-        categoria: "VISITANTE",
-        tipoVehiculo: tipoVehiculo
-    });
+    // Claim ATÓMICO: la condición estado:"DISPONIBLE" va DENTRO del update, así
+    // dos requests concurrentes no pueden reclamar la misma plaza (MongoDB solo
+    // deja que una matchee; la otra ve estado ya cambiado y no matchea).
+    // RESERVADO: plaza apartada para el visitante (valor real del enum, ya
+    // representado en la UI Plaza.jsx).
+    const plaza = await Parqueadero.findOneAndUpdate(
+        { ...tenantFilter, estado: "DISPONIBLE", categoria: "VISITANTE", tipoVehiculo: tipoVehiculo },
+        { $set: { estado: "RESERVADO", visitante: visitanteId } },
+        { new: true }
+    );
 
     if (!plaza) {
+        // No había plaza DISPONIBLE del tipo pedido al momento del update (o la
+        // reclamó otra request). Mensaje informativo best-effort.
         const alternativos = await Parqueadero.countDocuments({
             ...tenantFilter,
             estado: "DISPONIBLE",
@@ -108,12 +114,6 @@ const asignarVisitante = async (visitanteId, tipoVehiculo = "CARRO", tenantFilte
         }
         throw new Error("No hay parqueaderos disponibles para visitantes");
     }
-
-    // RESERVADO: plaza apartada para el visitante (aún no ocupada físicamente).
-    // Es un valor real del enum del schema y la UI (Plaza.jsx) ya lo representa.
-    plaza.estado = "RESERVADO";
-    plaza.visitante = visitanteId;
-    await plaza.save();
 
     return plaza;
 };
@@ -175,20 +175,21 @@ const liberarPlaza = async (idPlaza, tenantFilter) => {
 // Entrada por cámara/LPR: se identifica el visitante por visitanteId y se marca
 // OCUPADA su plaza (si tiene). Registra el acceso en historial con el shape real.
 const registrarEntrada = async ({ visitanteId, placa }, tenantFilter) => {
+    // Marca OCUPADA la plaza del visitante en una sola operación atómica
+    // (idempotente: si ya estaba OCUPADA, queda igual).
     let plaza = null;
     if (visitanteId) {
-        plaza = await Parqueadero.findOne({ visitante: visitanteId, ...tenantFilter });
+        plaza = await Parqueadero.findOneAndUpdate(
+            { visitante: visitanteId, ...tenantFilter },
+            { $set: { estado: "OCUPADO" } },
+            { new: true }
+        );
     }
 
     let nombreUsuario = 'Desconocido';
     if (visitanteId) {
         const visitanteDoc = await Visitante.findById(visitanteId);
         if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
-    }
-
-    if (plaza) {
-        plaza.estado = "OCUPADO";
-        await plaza.save();
     }
 
     const nuevoAcceso = new HistorialAcceso({
@@ -294,34 +295,47 @@ const obtenerEstadisticasHistorial = async (tenantFilter, opciones = {}) => {
 };
 
 const registrarSalida = async (plazaId, tenantFilter) => {
-    const plaza = await Parqueadero.findOne({ _id: plazaId, ...tenantFilter });
-    if (!plaza) throw new Error("Plaza no encontrada en este conjunto");
-    if (plaza.estado === "DISPONIBLE") throw new Error("La plaza ya está libre");
+    // Claim ATÓMICO de la salida: el guard estado != DISPONIBLE va DENTRO del
+    // update (pipeline), así dos salidas concurrentes no la procesan dos veces.
+    // Se usa {new:false} para obtener el pre-imagen (con visitante/placa) que
+    // necesita el registro de historial; el estado se decide condicionalmente
+    // (residente: queda OCUPADO/reservado; visitante: DISPONIBLE).
+    const previa = await Parqueadero.findOneAndUpdate(
+        { _id: plazaId, ...tenantFilter, estado: { $ne: "DISPONIBLE" } },
+        [{
+            $set: {
+                estado: { $cond: [{ $ifNull: ["$residenteAsignado", false] }, "OCUPADO", "DISPONIBLE"] },
+                visitante: null,
+                placaVehiculo: null
+            }
+        }],
+        { new: false }
+    );
+
+    if (!previa) {
+        const existe = await Parqueadero.exists({ _id: plazaId, ...tenantFilter });
+        throw new Error(existe ? "La plaza ya está libre" : "Plaza no encontrada en este conjunto");
+    }
 
     let nombreUsuario = 'Desconocido';
-    if (plaza.visitante) {
-        const visitanteDoc = await Visitante.findById(plaza.visitante);
+    if (previa.visitante) {
+        const visitanteDoc = await Visitante.findById(previa.visitante);
         if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
     }
-    const placaSalida = plaza.placaVehiculo;
-
-    plaza.estado = plaza.residenteAsignado ? "OCUPADO" : "DISPONIBLE"; // Residente: queda reservado
-    plaza.visitante = null;
-    plaza.placaVehiculo = null;
-    await plaza.save();
 
     const nuevoAcceso = new HistorialAcceso({
-        conjunto: plaza.conjunto,
-        placa: placaSalida || 'DESCONOCIDA',
+        conjunto: previa.conjunto,
+        placa: previa.placaVehiculo || 'DESCONOCIDA',
         tipoAcceso: 'salida',
         tipoUsuario: 'visitante',
         nombreUsuario,
-        plaza: plaza.numero,
+        plaza: previa.numero,
         fechaHora: new Date()
     });
     await nuevoAcceso.save();
 
-    return plaza;
+    // Devolver el estado ACTUAL (post-update) para consumidores/tests.
+    return Parqueadero.findById(previa._id);
 };
 
 const registrarAccesoVehicular = async (placa, tipo, tenantFilter, conjuntoId, usuarioLogueado) => {

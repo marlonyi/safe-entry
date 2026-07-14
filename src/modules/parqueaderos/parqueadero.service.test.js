@@ -41,6 +41,27 @@ describe('asignarVisitante', () => {
             parqueaderoService.asignarVisitante(null, 'CARRO', tenantFilter)
         ).rejects.toThrow(/No hay parqueaderos disponibles/);
     });
+
+    // Plan 012: el claim es atómico (findOneAndUpdate con estado:DISPONIBLE en el
+    // filtro). Dos requests concurrentes por la única plaza libre → solo una gana.
+    test('dos asignarVisitante concurrentes por la misma plaza: solo una tiene éxito', async () => {
+        const conjunto = await crearConjunto();
+        await Parqueadero.create({
+            conjunto: conjunto._id, numero: 'V1', categoria: 'VISITANTE',
+            tipoVehiculo: 'CARRO', estado: 'DISPONIBLE',
+        });
+        const tenantFilter = { conjunto: conjunto._id };
+        const a = new mongoose.Types.ObjectId();
+        const b = new mongoose.Types.ObjectId();
+
+        const results = await Promise.allSettled([
+            parqueaderoService.asignarVisitante(a, 'CARRO', tenantFilter),
+            parqueaderoService.asignarVisitante(b, 'CARRO', tenantFilter),
+        ]);
+
+        expect(results.filter(r => r.status === 'fulfilled')).toHaveLength(1);
+        expect(results.filter(r => r.status === 'rejected')).toHaveLength(1);
+    });
 });
 
 describe('registrarEntrada (cámara/LPR)', () => {
