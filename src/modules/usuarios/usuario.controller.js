@@ -596,12 +596,36 @@ exports.actualizarUsuario = async (req, res) => {
     try {
         const { isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
         const { id } = req.params;
-        const datos = { ...req.body };
+        // 🔒 Whitelist anti-escalada: NO aceptar rol/cedula/conjunto/password del
+        // cliente sin más. rol y cedula solo si quien edita es admin/superadmin;
+        // conjunto y password nunca por esta ruta (tienen endpoints dedicados).
+        const esPropio = req.usuario?.id === id;
+        const esAdminOSuperior = ['admin', 'superadmin'].includes(req.usuario?.rol);
+
+        const CAMPOS_BASICOS = ['nombre', 'apellido', 'apartamento', 'torre', 'tieneVehiculo', 'placaVehiculo', 'placa2Vehiculo'];
+        const CAMPOS_PRIVILEGIADOS = ['rol', 'cedula', 'estadoExpensa']; // solo admin/superadmin
+
+        const datos = {};
+        for (const campo of CAMPOS_BASICOS) {
+            if (req.body[campo] !== undefined) datos[campo] = req.body[campo];
+        }
+        if (esAdminOSuperior) {
+            for (const campo of CAMPOS_PRIVILEGIADOS) {
+                if (req.body[campo] !== undefined) datos[campo] = req.body[campo];
+            }
+        }
+        // Preservar el ejecutor para la auditoría (se extrae más abajo)
+        if (req.body.ejecutadoPor !== undefined) datos.ejecutadoPor = req.body.ejecutadoPor;
 
         // Obtener estado anterior ANTES de actualizar
         const usuarioAnterior = await Usuario.findById(id).lean();
         if (!usuarioAnterior) {
             return errorResponse(res, "Usuario no encontrado", 404);
+        }
+
+        // 🔒 Solo el propio usuario, o un admin/superadmin, pueden modificar
+        if (!esPropio && !esAdminOSuperior) {
+            return errorResponse(res, "No tienes permisos para modificar este usuario", 403);
         }
 
         // 🏢 Verificar que el usuario pertenezca al mismo conjunto (excepto SuperAdmin)
