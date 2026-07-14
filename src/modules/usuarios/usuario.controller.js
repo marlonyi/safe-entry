@@ -15,6 +15,7 @@ const { recordFailedLogin, resetLoginAttempts } = require('../../shared/middlewa
 const Conjunto = require('../conjuntos/conjunto.model');
 const Visitante = require('../visitantes/visitante.model');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
+const usuarioService = require('./usuario.service');
 
 // Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
 // temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().
@@ -950,29 +951,7 @@ exports.cambiarRol = async (req, res) => {
         const { id } = req.params;
         const { nuevoRol } = req.body;
 
-        // Validar roles permitidos
-        const rolesPermitidos = ['admin', 'porteria', 'residente'];
-        if (!rolesPermitidos.includes(nuevoRol)) {
-            return errorResponse(res, `Rol no válido. Use: ${rolesPermitidos.join(', ')}`, 400);
-        }
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return errorResponse(res, "ID de usuario no válido", 400);
-        }
-
-        const usuario = await Usuario.findById(id);
-        if (!usuario) {
-            return errorResponse(res, "Usuario no encontrado", 404);
-        }
-
-        // No permitir cambiar rol de superadmin
-        if (usuario.rol === 'superadmin') {
-            return errorResponse(res, "No se puede modificar el rol de un SuperAdmin", 403);
-        }
-
-        const rolAnterior = usuario.rol;
-        usuario.rol = nuevoRol;
-        await usuario.save();
+        const { usuario, rolAnterior } = await usuarioService.cambiarRol(id, nuevoRol);
 
         // Registrar en auditoría
         try {
@@ -1001,6 +980,7 @@ exports.cambiarRol = async (req, res) => {
             }
         });
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al cambiar rol:", error);
         errorResponse(res, "Error al cambiar rol", 500, getErrorDetails(error));
     }
@@ -1014,41 +994,7 @@ exports.moverAConjunto = async (req, res) => {
 
         logger.debug('📦 moverAConjunto - ID usuario:', id, '| conjuntoId:', conjuntoId);
 
-        // Validar que se recibió un conjuntoId
-        if (!conjuntoId || conjuntoId === '' || conjuntoId === 'null' || conjuntoId === 'undefined') {
-            return res.status(400).json({
-                error: "Debe seleccionar un conjunto válido",
-                detalle: `Valor recibido: "${conjuntoId}"`
-            });
-        }
-
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return errorResponse(res, "ID de usuario no válido", 400);
-        }
-        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
-            return res.status(400).json({
-                error: "ID de conjunto no válido",
-                detalle: `El valor "${conjuntoId}" no es un ID de MongoDB válido`
-            });
-        }
-
-        const conjunto = await Conjunto.findById(conjuntoId);
-        if (!conjunto) {
-            return errorResponse(res, "Conjunto no encontrado", 404);
-        }
-
-        const usuario = await Usuario.findById(id);
-        if (!usuario) {
-            return errorResponse(res, "Usuario no encontrado", 404);
-        }
-
-        if (usuario.rol === 'superadmin') {
-            return errorResponse(res, "No se puede mover a un SuperAdmin", 403);
-        }
-
-        const conjuntoAnterior = usuario.conjunto;
-        usuario.conjunto = conjuntoId;
-        await usuario.save();
+        const { usuario, conjunto } = await usuarioService.moverAConjunto(id, conjuntoId);
 
         logger.debug('✅ Usuario movido exitosamente:', usuario.nombre, '->', conjunto.nombre);
 
@@ -1061,6 +1007,11 @@ exports.moverAConjunto = async (req, res) => {
             }
         });
     } catch (error) {
+        // Preservar la forma exacta de respuesta del endpoint original
+        if (error.status && error.detalle !== undefined) {
+            return res.status(error.status).json({ error: error.message, detalle: error.detalle });
+        }
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("❌ Error al mover usuario:", error);
         errorResponse(res, "Error al mover usuario", 500, getErrorDetails(error));
     }
