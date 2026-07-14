@@ -5,7 +5,7 @@ const { models, middlewares, logger } = require('../../index');
 const { AuditLog } = models;
 const { getTenantFilter, getConjuntoId } = middlewares.auth;
 const visitanteService = require('./visitante.service');
-const { successResponse, errorResponse } = require('../../../utils/responseHandler');
+const { successResponse, errorResponse } = require('../../shared/utils/responseHandler');
 
 exports.registrarVisitante = async (req, res) => {
     try {

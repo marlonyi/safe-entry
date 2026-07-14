@@ -5,7 +5,7 @@ const { models, middlewares, logger } = require('../../index');
 const { AuditLog } = models;
 const { getTenantFilter, getConjuntoId } = middlewares.auth;
 const parqueaderoService = require('./parqueadero.service');
-const { successResponse, errorResponse } = require("../../../utils/responseHandler");
+const { successResponse, errorResponse } = require("../../shared/utils/responseHandler");
 
 const obtenerPlazas = async (req, res) => {
     try {

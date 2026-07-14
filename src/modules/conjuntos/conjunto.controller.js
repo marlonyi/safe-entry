@@ -4,7 +4,7 @@
 const { models, logger } = require('../../index');
 const { AuditLog } = models;
 const conjuntoService = require('./conjunto.service');
-const { successResponse, errorResponse } = require('../../../utils/responseHandler');
+const { successResponse, errorResponse } = require('../../shared/utils/responseHandler');
 
 const crearConjunto = async (req, res) => {
     try {

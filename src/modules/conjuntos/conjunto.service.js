@@ -4,7 +4,7 @@
 const Conjunto = require('./conjunto.model');
 const Usuario = require('../usuarios/usuario.model');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
-const { escaparRegex } = require('../../../utils/regexHelper');
+const { escaparRegex } = require('../../shared/utils/regexHelper');
 const Visitante = require('../visitantes/visitante.model');
 
 const crearConjunto = async (datos) => {

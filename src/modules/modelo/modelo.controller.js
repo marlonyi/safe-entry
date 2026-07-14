@@ -19,7 +19,7 @@
 
 const mongoose = require('mongoose');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
-const HistorialAcceso = require('../../../models/historialAcceso');
+const HistorialAcceso = require('../../shared/models/historialAcceso');
 const Usuario = require('../usuarios/usuario.model');
 const Conjunto = require('../conjuntos/conjunto.model');
 

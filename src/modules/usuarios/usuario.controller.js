@@ -6,8 +6,8 @@ const { Usuario, AuditLog } = models;
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
-const { successResponse, errorResponse } = require('../../../utils/responseHandler');
-const { escaparRegex } = require('../../../utils/regexHelper');
+const { successResponse, errorResponse } = require('../../shared/utils/responseHandler');
+const { escaparRegex } = require('../../shared/utils/regexHelper');
 
 // Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
 // temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().

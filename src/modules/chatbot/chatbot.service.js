@@ -6,7 +6,7 @@ const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
 const Parqueadero = require("../parqueaderos/parqueadero.model");
 const Conjunto = require("../../../models/conjunto");
-const { escaparRegex } = require("../../../utils/regexHelper");
+const { escaparRegex } = require("../../shared/utils/regexHelper");
 
 // ===== Definicion de herramientas (tool schemas) =====
 const TOOLS = [

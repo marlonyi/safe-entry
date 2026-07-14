@@ -6,7 +6,7 @@ const HistorialAcceso = require("../../shared/models/historialAcceso");
 const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
 const Conjunto = require("../conjuntos/conjunto.model");
-const { escaparRegex } = require("../../../utils/regexHelper");
+const { escaparRegex } = require("../../shared/utils/regexHelper");
 
 const obtenerPlazas = async (tenantFilter, filtrosAdicionales = {}) => {
     const query = { ...tenantFilter, ...filtrosAdicionales };

@@ -17,8 +17,8 @@ const Conjunto = require('../models/conjunto');
 const Usuario = require('../models/usuario');
 const Visitante = require('../models/visitante');
 const Parqueadero = require('../models/parqueadero');
-const HistorialAcceso = require('../models/historialAcceso');
-const AuditLog = require('../models/auditLog');
+const HistorialAcceso = require('../src/shared/models/historialAcceso');
+const AuditLog = require('../src/shared/models/auditLog');
 
 // ===== Perfiles por conjunto =====
 const PERFILES = {
