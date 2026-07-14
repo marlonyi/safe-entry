@@ -200,6 +200,8 @@ class MultiCameraApp:
         # Configuración
         self.api_url = os.getenv("API_BASE_URL", "http://localhost:5000")
         self.debug = os.getenv("DEBUG", "false").lower() == "true"
+        # Secreto compartido para autenticar contra las rutas de cámara del backend
+        self.camera_service_key = os.getenv("CAMERA_SERVICE_KEY", "")
         
         # Sesión
         self.logged_in = False
@@ -878,6 +880,7 @@ class MultiCameraApp:
                     "conjuntoId": self.conjunto_id,
                     "tipoAcceso": tipo_acceso
                 },
+                headers={"X-Camera-Service-Key": self.camera_service_key},
                 timeout=5
             )
         except Exception as e:
@@ -903,6 +906,7 @@ class MultiCameraApp:
                     "conjuntoId": self.conjunto_id,
                     "visitanteId": visitante_id
                 },
+                headers={"X-Camera-Service-Key": self.camera_service_key},
                 timeout=5
             )
         except Exception as e:
@@ -918,6 +922,7 @@ class MultiCameraApp:
                     "conjuntoId": self.conjunto_id,
                     "visitanteId": visitante_id
                 },
+                headers={"X-Camera-Service-Key": self.camera_service_key},
                 timeout=5
             )
             self.log(f"Salida registrada: {placa} - Plaza liberada")

@@ -170,27 +170,42 @@ const liberarPlaza = async (idPlaza, tenantFilter) => {
     return plaza;
 };
 
-const registrarEntrada = async (codigoParqueadero, tenantFilter) => {
-    const plaza = await Parqueadero.findOne({ codigoQR: codigoParqueadero, ...tenantFilter });
-    if (!plaza) throw new Error("Plaza no encontrada o no pertenece a tu conjunto");
-    if (plaza.estado === "OCUPADO") throw new Error("Esta plaza ya está ocupada");
+// Entrada por cámara/LPR: se identifica el visitante por visitanteId y se marca
+// OCUPADA su plaza (si tiene). Registra el acceso en historial con el shape real.
+const registrarEntrada = async ({ visitanteId, placa }, tenantFilter) => {
+    let plaza = null;
+    if (visitanteId) {
+        plaza = await Parqueadero.findOne({ visitante: visitanteId, ...tenantFilter });
+    }
 
-    plaza.estado = "OCUPADO";
-    plaza.ultimaOcupacion = new Date();
-    await plaza.save();
+    let nombreUsuario = 'Desconocido';
+    if (visitanteId) {
+        const visitanteDoc = await Visitante.findById(visitanteId);
+        if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
+    }
 
-    const visitante = plaza.visitante || null;
+    if (plaza) {
+        plaza.estado = "OCUPADO";
+        await plaza.save();
+    }
+
     const nuevoAcceso = new HistorialAcceso({
-        plazaId: plaza._id,
-        visitanteId: visitante,
-        conjunto: plaza.conjunto,
-        tipo: 'ENTRADA',
-        metodo: 'QR_SCAN',
+        conjunto: tenantFilter.conjunto,
+        placa: placa || (plaza && plaza.placaVehiculo) || 'DESCONOCIDA',
+        tipoAcceso: 'entrada',
+        tipoUsuario: 'visitante',
+        nombreUsuario,
+        plaza: plaza ? plaza.numero : null,
         fechaHora: new Date()
     });
     await nuevoAcceso.save();
 
-    return plaza;
+    return plaza || { numero: null };
+};
+
+// Buscar la plaza que un visitante ocupa actualmente (para registrar su salida).
+const buscarPlazaOcupadaPorVisitante = async (visitanteId, tenantFilter) => {
+    return Parqueadero.findOne({ visitante: visitanteId, ...tenantFilter });
 };
 
 const obtenerHistorial = async (tenantFilter, opciones = {}) => {
@@ -281,18 +296,25 @@ const registrarSalida = async (plazaId, tenantFilter) => {
     if (!plaza) throw new Error("Plaza no encontrada en este conjunto");
     if (plaza.estado === "DISPONIBLE") throw new Error("La plaza ya está libre");
 
+    let nombreUsuario = 'Desconocido';
+    if (plaza.visitante) {
+        const visitanteDoc = await Visitante.findById(plaza.visitante);
+        if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
+    }
+    const placaSalida = plaza.placaVehiculo;
+
     plaza.estado = plaza.residenteAsignado ? "OCUPADO" : "DISPONIBLE"; // Residente: queda reservado
-    const visitanteId = plaza.visitante;
     plaza.visitante = null;
     plaza.placaVehiculo = null;
     await plaza.save();
 
     const nuevoAcceso = new HistorialAcceso({
-        plazaId: plaza._id,
-        visitanteId: visitanteId,
         conjunto: plaza.conjunto,
-        tipo: 'SALIDA',
-        metodo: 'MANUAL',
+        placa: placaSalida || 'DESCONOCIDA',
+        tipoAcceso: 'salida',
+        tipoUsuario: 'visitante',
+        nombreUsuario,
+        plaza: plaza.numero,
         fechaHora: new Date()
     });
     await nuevoAcceso.save();
@@ -305,36 +327,33 @@ const registrarAccesoVehicular = async (placa, tipo, tenantFilter, conjuntoId, u
     let visitante = null;
 
     if (!residente) {
-        visitante = await Visitante.findOne({ ...tenantFilter, placaVehiculo: placa, estado: 'activo' });
+        // Solo visitantes vigentes (aún no salieron) pueden auto-registrar acceso por placa.
+        visitante = await Visitante.findOne({
+            ...tenantFilter,
+            placaVehiculo: placa,
+            estado: { $in: ['pendiente', 'ingresado'] }
+        });
     }
 
     if (!residente && !visitante) {
         throw new Error("Vehículo no registrado o inactivo");
     }
 
-    let accesoData = {
-        tipo,
-        fechaHora: new Date(),
-        metodo: 'LPR_CAMERA',
+    const persona = residente || visitante;
+    const nombreUsuario = `${persona.nombre} ${persona.apellido}`;
+    const tipoUsuario = residente ? 'residente' : 'visitante';
+
+    const acceso = new HistorialAcceso({
         conjunto: conjuntoId,
-        registradoPor: usuarioLogueado ? usuarioLogueado.id : null,
-        placaManual: placa
-    };
-
-    if (residente) {
-        accesoData.residenteId = residente._id;
-    } else if (visitante) {
-        accesoData.visitanteId = visitante._id;
-    }
-
-    const acceso = new HistorialAcceso(accesoData);
+        placa,
+        tipoAcceso: tipo,
+        tipoUsuario,
+        nombreUsuario,
+        fechaHora: new Date()
+    });
     await acceso.save();
 
-    return {
-        acceso,
-        persona: residente ? `${residente.nombre} ${residente.apellido}` : `${visitante.nombre} ${visitante.apellido}`,
-        rol: residente ? 'residente' : 'visitante'
-    };
+    return { acceso, persona: nombreUsuario, rol: tipoUsuario };
 };
 
 // Crear parqueaderos con distribución por categoría
@@ -876,6 +895,7 @@ module.exports = {
     asignarResidente,
     liberarPlaza,
     registrarEntrada,
+    buscarPlazaOcupadaPorVisitante,
     obtenerHistorial,
     obtenerEstadisticasHistorial,
     registrarSalida,

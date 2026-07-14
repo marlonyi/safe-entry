@@ -11,6 +11,7 @@ const router = express.Router();
 // ========================================
 const { middlewares } = require('../../index');
 const { verificarToken, esPorteriaOAdmin, esSuperAdmin, esAdmin } = middlewares.auth;
+const { verificarServicioCamara } = require('../../shared/middlewares/serviceAuth.middleware');
 const parqueaderoController = require('./parqueadero.controller');
 
 // ========================================
@@ -57,17 +58,17 @@ router.get("/historial/estadisticas", verificarToken, parqueaderoController.obte
 router.get("/historial", verificarToken, parqueaderoController.obtenerHistorial);
 
 // ========================================
-// 📌 Rutas para cámaras (sin auth - Python)
+// 📌 Rutas para cámaras (auth por secreto compartido X-Camera-Service-Key)
 // ========================================
 
 // 📌 Registrar entrada de vehículo (usado por Python al detectar placa)
-router.post("/registrar-entrada", parqueaderoController.registrarEntrada);
+router.post("/registrar-entrada", verificarServicioCamara, parqueaderoController.registrarEntrada);
 
 // 📌 Registrar salida de vehículo (usado por Python)
-router.post("/registrar-salida", parqueaderoController.registrarSalida);
+router.post("/registrar-salida", verificarServicioCamara, parqueaderoController.registrarSalida);
 
 // 📌 Registrar acceso genérico (para Python - detecta automáticamente entrada o salida)
-router.post("/registrar-acceso", parqueaderoController.registrarAcceso);
+router.post("/registrar-acceso", verificarServicioCamara, parqueaderoController.registrarAcceso);
 
 // ========================================
 // 📌 Rutas de gestión de plazas

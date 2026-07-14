@@ -1,6 +1,8 @@
 const { connect, closeDatabase, clearDatabase } = require('../../shared/testing/setupTestDb');
 const Parqueadero = require('./parqueadero.model');
 const Conjunto = require('../conjuntos/conjunto.model');
+const Visitante = require('../visitantes/visitante.model');
+const HistorialAcceso = require('../../shared/models/historialAcceso');
 const parqueaderoService = require('./parqueadero.service');
 
 beforeAll(async () => await connect());
@@ -11,10 +13,9 @@ const crearConjunto = () =>
     Conjunto.create({ nombre: 'Test', direccion: 'x', ciudad: 'x', estado: 'activo' });
 
 describe('asignarVisitante', () => {
-    // CARACTERIZACIÓN: a fecha de hoy asignarVisitante fija estado="EN_ESPERA",
-    // valor que NO existe en el enum del schema Parqueadero
-    // (["DISPONIBLE","OCUPADO","RESERVADO"]), por lo que plaza.save() lanza
-    // ValidationError. BUG documentado — lo arregla el plan 011.
+    // CARACTERIZACIÓN: asignarVisitante fija estado="EN_ESPERA", valor que NO existe
+    // en el enum del schema Parqueadero (["DISPONIBLE","OCUPADO","RESERVADO"]) →
+    // plaza.save() lanza ValidationError. BUG documentado — lo arregla el plan 011.
     test('lanza ValidationError porque EN_ESPERA no está en el enum (BUG, plan 011)', async () => {
         const conjunto = await crearConjunto();
         await Parqueadero.create({
@@ -38,27 +39,57 @@ describe('asignarVisitante', () => {
     });
 });
 
-describe('registrarSalida', () => {
-    // CARACTERIZACIÓN: registrarSalida flipea la plaza a DISPONIBLE y la guarda,
-    // pero luego construye un HistorialAcceso con campos que no matchean el schema
-    // (tipo:'SALIDA' en vez de tipoAcceso enum, sin placa/tipoUsuario/nombreUsuario
-    // requeridos) → HistorialAcceso.save() lanza ValidationError DESPUÉS de haber
-    // persistido el cambio de la plaza. BUG documentado — lo arregla el plan 010.
-    test('lanza ValidationError al guardar el historial, pero la plaza ya quedó DISPONIBLE (BUG, plan 010)', async () => {
+describe('registrarEntrada (cámara/LPR)', () => {
+    test('marca OCUPADA la plaza del visitante y crea un HistorialAcceso de entrada', async () => {
         const conjunto = await crearConjunto();
+        const visitante = await Visitante.create({
+            nombre: 'Ana', apellido: 'Gómez', cedula: '111', placaVehiculo: 'ABC123',
+            conjunto: conjunto._id, estado: 'pendiente',
+        });
         const plaza = await Parqueadero.create({
-            conjunto: conjunto._id, numero: 'V2', categoria: 'VISITANTE',
-            tipoVehiculo: 'CARRO', estado: 'OCUPADO',
+            conjunto: conjunto._id, numero: 'V5', categoria: 'VISITANTE',
+            tipoVehiculo: 'CARRO', estado: 'DISPONIBLE', visitante: visitante._id,
         });
         const tenantFilter = { conjunto: conjunto._id };
 
-        await expect(
-            parqueaderoService.registrarSalida(plaza._id.toString(), tenantFilter)
-        ).rejects.toThrow();
+        const result = await parqueaderoService.registrarEntrada(
+            { visitanteId: visitante._id, placa: 'ABC123' }, tenantFilter
+        );
 
-        // Efecto colateral de escritura parcial que causa el bug hoy:
+        expect(result.numero).toBe('V5');
+        const plazaRecargada = await Parqueadero.findById(plaza._id);
+        expect(plazaRecargada.estado).toBe('OCUPADO');
+
+        const h = await HistorialAcceso.findOne({ conjunto: conjunto._id });
+        expect(h.tipoAcceso).toBe('entrada');
+        expect(h.tipoUsuario).toBe('visitante');
+        expect(h.nombreUsuario).toBe('Ana Gómez');
+        expect(h.placa).toBe('ABC123');
+    });
+});
+
+describe('registrarSalida', () => {
+    // Tras el plan 010, registrarSalida construye el HistorialAcceso con el shape
+    // real del schema (placa/tipoAcceso/tipoUsuario/nombreUsuario) y ya NO lanza.
+    test('libera la plaza (DISPONIBLE) y registra un HistorialAcceso de salida', async () => {
+        const conjunto = await crearConjunto();
+        const plaza = await Parqueadero.create({
+            conjunto: conjunto._id, numero: 'V2', categoria: 'VISITANTE',
+            tipoVehiculo: 'CARRO', estado: 'OCUPADO', placaVehiculo: 'ABC123',
+        });
+        const tenantFilter = { conjunto: conjunto._id };
+
+        const resultado = await parqueaderoService.registrarSalida(plaza._id.toString(), tenantFilter);
+        expect(resultado.estado).toBe('DISPONIBLE');
+
         const plazaRecargada = await Parqueadero.findById(plaza._id);
         expect(plazaRecargada.estado).toBe('DISPONIBLE');
+        expect(plazaRecargada.visitante).toBeNull();
+
+        const historial = await HistorialAcceso.find({ conjunto: conjunto._id });
+        expect(historial).toHaveLength(1);
+        expect(historial[0].tipoAcceso).toBe('salida');
+        expect(historial[0].placa).toBe('ABC123');
     });
 
     test('lanza "La plaza ya está libre" si la plaza estaba DISPONIBLE', async () => {
@@ -72,5 +103,40 @@ describe('registrarSalida', () => {
         await expect(
             parqueaderoService.registrarSalida(plaza._id.toString(), tenantFilter)
         ).rejects.toThrow(/ya está libre/);
+    });
+});
+
+describe('registrarAccesoVehicular', () => {
+    // Tras el plan 010, el filtro de visitante usa estado ∈ {pendiente, ingresado}
+    // (antes 'activo', valor inexistente → nunca hacía match) y el HistorialAcceso
+    // se construye con el shape real.
+    test('registra el acceso de un visitante en estado pendiente', async () => {
+        const conjunto = await crearConjunto();
+        const tenantFilter = { conjunto: conjunto._id };
+        await Visitante.create({
+            nombre: 'Ana', apellido: 'Gómez', cedula: '111', placaVehiculo: 'XYZ789',
+            conjunto: conjunto._id, estado: 'pendiente',
+        });
+
+        const data = await parqueaderoService.registrarAccesoVehicular(
+            'XYZ789', 'entrada', tenantFilter, conjunto._id, null
+        );
+
+        expect(data.rol).toBe('visitante');
+        expect(data.persona).toBe('Ana Gómez');
+
+        const h = await HistorialAcceso.findOne({ conjunto: conjunto._id });
+        expect(h.tipoAcceso).toBe('entrada');
+        expect(h.tipoUsuario).toBe('visitante');
+        expect(h.placa).toBe('XYZ789');
+    });
+
+    test('lanza error si la placa no es de un residente ni de un visitante vigente', async () => {
+        const conjunto = await crearConjunto();
+        const tenantFilter = { conjunto: conjunto._id };
+
+        await expect(
+            parqueaderoService.registrarAccesoVehicular('NOPE00', 'entrada', tenantFilter, conjunto._id, null)
+        ).rejects.toThrow(/no registrado/);
     });
 });

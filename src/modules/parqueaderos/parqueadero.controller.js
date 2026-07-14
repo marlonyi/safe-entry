@@ -102,9 +102,13 @@ const liberarPlazas = async (req, res) => {
 
 const registrarEntrada = async (req, res) => {
     try {
-        const { codigoParqueadero } = req.body;
-        const tenantFilter = getTenantFilter(req);
-        const plaza = await parqueaderoService.registrarEntrada(codigoParqueadero, tenantFilter);
+        // Contrato del cliente de cámara (qr-scanner): { placa, conjuntoId, visitanteId }
+        const { placa, conjuntoId, visitanteId } = req.body;
+        if (!conjuntoId) {
+            return errorResponse(res, "conjuntoId es obligatorio", 400);
+        }
+        const tenantFilter = { conjunto: conjuntoId };
+        const plaza = await parqueaderoService.registrarEntrada({ visitanteId, placa }, tenantFilter);
 
         return successResponse(res, { numero: plaza.numero }, "Acceso registrado correctamente");
     } catch (error) {
@@ -149,8 +153,20 @@ const obtenerEstadisticasHistorial = async (req, res) => {
 
 const registrarSalida = async (req, res) => {
     try {
-        const tenantFilter = getTenantFilter(req);
-        const plaza = await parqueaderoService.registrarSalida(req.params.plazaId, tenantFilter);
+        // Contrato del cliente de cámara (qr-scanner): { placa, conjuntoId, visitanteId }
+        // La plaza a liberar se identifica por visitanteId (no llega plazaId).
+        const { conjuntoId, visitanteId } = req.body;
+        if (!conjuntoId || !visitanteId) {
+            return errorResponse(res, "Se requiere conjuntoId y visitanteId", 400);
+        }
+        const tenantFilter = { conjunto: conjuntoId };
+
+        const plazaOcupada = await parqueaderoService.buscarPlazaOcupadaPorVisitante(visitanteId, tenantFilter);
+        if (!plazaOcupada) {
+            return errorResponse(res, "No se encontró una plaza ocupada por ese visitante", 404);
+        }
+
+        const plaza = await parqueaderoService.registrarSalida(plazaOcupada._id, tenantFilter);
 
         if (req.usuarioLogueado) {
             await AuditLog.registrar({
@@ -168,15 +184,18 @@ const registrarSalida = async (req, res) => {
 
 const registrarAcceso = async (req, res) => {
     try {
-        const { placa, tipo } = req.body;
-        const tenantFilter = getTenantFilter(req);
-        const conjuntoId = getConjuntoId(req);
+        // Contrato del cliente de cámara (qr-scanner): { placa, conjuntoId, tipoAcceso }
+        const { placa, conjuntoId, tipoAcceso } = req.body;
 
-        if (!placa || !tipo) {
-            return errorResponse(res, "Placa y tipo de acceso son obligatorios", 400);
+        if (!placa || !tipoAcceso) {
+            return errorResponse(res, "placa y tipoAcceso son obligatorios", 400);
         }
+        if (!conjuntoId) {
+            return errorResponse(res, "conjuntoId es obligatorio", 400);
+        }
+        const tenantFilter = { conjunto: conjuntoId };
 
-        const data = await parqueaderoService.registrarAccesoVehicular(placa, tipo, tenantFilter, conjuntoId, req.usuarioLogueado);
+        const data = await parqueaderoService.registrarAccesoVehicular(placa, tipoAcceso, tenantFilter, conjuntoId, req.usuarioLogueado);
 
         return successResponse(res, data, "Acceso registrado correctamente");
     } catch (error) {
