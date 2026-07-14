@@ -114,40 +114,6 @@ class MemoryCache {
     }
 
     /**
-     * Middleware de Express para cachear respuestas
-     * @param {number} ttl - Tiempo de vida en milisegundos
-     */
-    middleware(ttl = this.defaultTTL) {
-        return (req, res, next) => {
-            // Solo cachear GET requests
-            if (req.method !== 'GET') {
-                return next();
-            }
-
-            const key = `route:${req.originalUrl}`;
-            const cached = this.get(key);
-
-            if (cached) {
-                res.set('X-Cache', 'HIT');
-                return res.json(cached);
-            }
-
-            // Interceptar res.json para cachear la respuesta
-            const originalJson = res.json.bind(res);
-            res.json = (data) => {
-                // Solo cachear respuestas exitosas
-                if (res.statusCode >= 200 && res.statusCode < 300) {
-                    this.set(key, data, ttl);
-                }
-                res.set('X-Cache', 'MISS');
-                return originalJson(data);
-            };
-
-            next();
-        };
-    }
-
-    /**
      * Eliminar entradas expiradas
      */
     _cleanup() {
@@ -199,10 +165,5 @@ const cache = new MemoryCache({
     maxSize: 500,               // Máximo 500 entradas
     cleanupInterval: 5 * 60 * 1000  // Limpiar cada 5 minutos
 });
-
-// Helper para invalidar cache relacionado
-cache.invalidateUsuarios = () => cache.deletePattern('route:/api/usuarios*');
-cache.invalidateVisitantes = () => cache.deletePattern('route:/api/visitantes*');
-cache.invalidateParqueaderos = () => cache.deletePattern('route:/api/parqueaderos*');
 
 module.exports = cache;
