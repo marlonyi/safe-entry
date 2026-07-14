@@ -8,6 +8,13 @@ const jwt = require("jsonwebtoken");
 const crypto = require("crypto");
 const { successResponse, errorResponse } = require('../../shared/utils/responseHandler');
 const { escaparRegex } = require('../../shared/utils/regexHelper');
+const mongoose = require('mongoose');
+const { getConjuntoId, getTenantFilter, isSuperAdmin } = require('../../shared/middlewares/auth.middleware');
+const { audit } = require('../../shared/middlewares/audit.middleware');
+const { recordFailedLogin, resetLoginAttempts } = require('../../shared/middlewares/rateLimit.middleware');
+const Conjunto = require('../conjuntos/conjunto.model');
+const Visitante = require('../visitantes/visitante.model');
+const Parqueadero = require('../parqueaderos/parqueadero.model');
 
 // Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
 // temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().
@@ -107,7 +114,6 @@ exports.crearUsuario = async (req, res) => {
         }
 
         // 🏢 MULTI-TENANT: Determinar conjunto para el nuevo usuario
-        const { getConjuntoId, isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
 
         // Prioridad: 1) conjuntoId del body (SuperAdmin), 2) conjunto del creador
         let conjuntoDelCreador = req.body.conjuntoId || getConjuntoId(req);
@@ -223,8 +229,6 @@ exports.crearUsuario = async (req, res) => {
 exports.loginUsuario = async (req, res) => {
     try {
         const { cedula, password, conjuntoId } = req.body; // conjuntoId opcional para casos de múltiples matches
-        const { audit } = require('../../shared/middlewares/audit.middleware');
-        const { recordFailedLogin, resetLoginAttempts } = require('../../shared/middlewares/rateLimit.middleware');
 
         // Helper para generar tokens (ahora incluye conjuntoId)
         const generateTokens = (payload) => {
@@ -451,8 +455,6 @@ exports.refreshToken = async (req, res) => {
 // 🏢 IMPORTANTE: Aplica filtrado multi-tenant para aislar datos por conjunto
 exports.obtenerUsuarios = async (req, res) => {
     try {
-        const Visitante = require("../visitantes/visitante.model");
-        const { getTenantFilter, isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
 
         // 🏢 Obtener filtro de tenant (conjunto)
         // SuperAdmin ve todo, otros roles solo ven su conjunto
@@ -587,7 +589,6 @@ exports.obtenerUsuarios = async (req, res) => {
 // 🏢 Verifica que el usuario pertenezca al mismo conjunto
 exports.obtenerUsuarioPorId = async (req, res) => {
     try {
-        const { getTenantFilter, isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
 
         if (req.params.id === "admin") {
             return res.json(ADMIN_INFO);
@@ -623,7 +624,6 @@ exports.obtenerUsuarioPorId = async (req, res) => {
 // 🏢 Verifica que el usuario pertenezca al mismo conjunto
 exports.actualizarUsuario = async (req, res) => {
     try {
-        const { isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
         const { id } = req.params;
         // 🔒 Whitelist anti-escalada: NO aceptar rol/cedula/conjunto/password del
         // cliente sin más. rol y cedula solo si quien edita es admin/superadmin;
@@ -754,8 +754,6 @@ exports.actualizarUsuario = async (req, res) => {
 // 🏢 Verifica que el usuario pertenezca al mismo conjunto antes de eliminar
 exports.eliminarUsuario = async (req, res) => {
     try {
-        const Visitante = require("../visitantes/visitante.model");
-        const { isSuperAdmin } = require("../../shared/middlewares/auth.middleware");
         const { id, tipo } = req.params;
         const usuarioEjecutor = req.usuarioLogueado || null;
 
@@ -903,7 +901,6 @@ exports.actualizarFotoPerfil = async (req, res) => {
         }
 
         // Validar que el ID sea un ObjectId válido
-        const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
             logger.debug('❌ ID no válido:', id);
             return errorResponse(res, "ID de usuario no válido", 400);
@@ -959,7 +956,6 @@ exports.cambiarRol = async (req, res) => {
             return errorResponse(res, `Rol no válido. Use: ${rolesPermitidos.join(', ')}`, 400);
         }
 
-        const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return errorResponse(res, "ID de usuario no válido", 400);
         }
@@ -1026,7 +1022,6 @@ exports.moverAConjunto = async (req, res) => {
             });
         }
 
-        const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return errorResponse(res, "ID de usuario no válido", 400);
         }
@@ -1037,7 +1032,6 @@ exports.moverAConjunto = async (req, res) => {
             });
         }
 
-        const Conjunto = require('../conjuntos/conjunto.model');
         const conjunto = await Conjunto.findById(conjuntoId);
         if (!conjunto) {
             return errorResponse(res, "Conjunto no encontrado", 404);
@@ -1078,7 +1072,6 @@ exports.moverAConjunto = async (req, res) => {
 exports.crearAdminRapido = async (req, res) => {
     try {
         const { conjuntoId, nombre, apellido, cedula, email } = req.body;
-        const Conjunto = require("../conjuntos/conjunto.model");
 
         // Validar que conjuntoId es válido
         if (!conjuntoId) {
@@ -1086,7 +1079,6 @@ exports.crearAdminRapido = async (req, res) => {
         }
 
         // Validar formato de ObjectId
-        const mongoose = require("mongoose");
         if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
             return errorResponse(res, "ID de conjunto inválido", 400);
         }
@@ -1181,9 +1173,6 @@ exports.exportarDatosConjunto = async (req, res) => {
         const { id } = req.params;
         const { formato = 'json' } = req.query;
 
-        const Conjunto = require("../conjuntos/conjunto.model");
-        const Visitante = require("../visitantes/visitante.model");
-        const Parqueadero = require("../parqueaderos/parqueadero.model");
 
         // Verificar que el conjunto existe
         const conjunto = await Conjunto.findById(id);
@@ -1456,7 +1445,6 @@ exports.restablecerPassword = async (req, res) => {
         }
 
         // Buscar usuario
-        const mongoose = require('mongoose');
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return errorResponse(res, "ID de usuario no válido", 400);
         }
