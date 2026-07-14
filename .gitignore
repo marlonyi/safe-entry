@@ -13,6 +13,10 @@ node_modules/
 !.env.local.example
 !.env.docker.example
 
+# ── Config MCP local (contiene credenciales — NUNCA subir) ─────
+.mcp.json
+!.mcp.json.example
+
 # ── Logs ──────────────────────────────────────────────────────
 logs/
 *.log

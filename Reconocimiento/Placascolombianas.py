@@ -20,6 +20,13 @@ import requests
 import os
 
 try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    # python-dotenv es opcional; si no está, se usan las variables de entorno del sistema
+    pass
+
+try:
     from ultralytics import YOLO
 except ImportError:
     print("Error: Falta instalar ultralytics. Ejecuta: pip install ultralytics")
@@ -46,8 +53,11 @@ class PlateRecognizer:
         self.api_url = "http://localhost:5000/api"
 
         try:
+            mongo_uri = os.environ.get("MONGO_URI")
+            if not mongo_uri:
+                raise ValueError("MONGO_URI no está definido en el entorno (.env)")
             self.client = MongoClient(
-                "mongodb+srv://marlonyi:marlonyi@cluster0.oplr0za.mongodb.net/adminResidencial?retryWrites=true&w=majority&appName=Cluster0",
+                mongo_uri,
                 serverSelectionTimeoutMS=5000,
             )
             self.db = self.client["adminResidencial"]
