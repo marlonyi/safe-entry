@@ -1,3 +1,4 @@
+const bcrypt = require('bcryptjs');
 const { connect, closeDatabase, clearDatabase } = require('../../shared/testing/setupTestDb');
 const Usuario = require('./usuario.model');
 const Conjunto = require('../conjuntos/conjunto.model');
@@ -63,5 +64,34 @@ describe('usuarioService.moverAConjunto', () => {
         const usuario = await crearUsuario((await Conjunto.create({ nombre: 'C', estado: 'activo' }))._id);
         await expect(usuarioService.moverAConjunto(usuario._id.toString(), '507f1f77bcf86cd799439011'))
             .rejects.toMatchObject({ status: 404 });
+    });
+});
+
+describe('usuarioService.cambiarPassword', () => {
+    async function usuarioConPassword(pw) {
+        const conjunto = await Conjunto.create({ nombre: 'T', estado: 'activo' });
+        return Usuario.create({
+            conjunto: conjunto._id, nombre: 'Ana', apellido: 'G', cedula: '12345',
+            password: await bcrypt.hash(pw, 10), rol: 'residente',
+        });
+    }
+
+    test('cambia la contraseña cuando la actual es correcta', async () => {
+        const u = await usuarioConPassword('vieja123');
+        await usuarioService.cambiarPassword(u._id.toString(), 'vieja123', 'nueva123');
+        const recargado = await Usuario.findById(u._id).select('+password');
+        expect(await bcrypt.compare('nueva123', recargado.password)).toBe(true);
+    });
+
+    test('contraseña actual incorrecta lanza 401 customError', async () => {
+        const u = await usuarioConPassword('vieja123');
+        await expect(usuarioService.cambiarPassword(u._id.toString(), 'incorrecta', 'nueva123'))
+            .rejects.toMatchObject({ status: 401, customError: true });
+    });
+
+    test('nueva contraseña muy corta lanza 400', async () => {
+        const u = await usuarioConPassword('vieja123');
+        await expect(usuarioService.cambiarPassword(u._id.toString(), 'vieja123', '123'))
+            .rejects.toMatchObject({ status: 400 });
     });
 });

@@ -9,6 +9,7 @@
  * que el controller reproduzca EXACTAMENTE la misma respuesta.
  */
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const Usuario = require('./usuario.model');
 const Conjunto = require('../conjuntos/conjunto.model');
 
@@ -67,4 +68,31 @@ const moverAConjunto = async (id, conjuntoId) => {
     return { usuario, conjunto };
 };
 
-module.exports = { cambiarRol, moverAConjunto };
+// El propio usuario cambia su contraseña (verificando la actual).
+const cambiarPassword = async (userId, passwordActual, passwordNueva) => {
+    if (!passwordActual || !passwordNueva) {
+        throw errorHttp('Debe proporcionar la contraseña actual y la nueva contraseña', 400);
+    }
+    if (passwordNueva.length < 6) {
+        throw errorHttp('La nueva contraseña debe tener al menos 6 caracteres', 400);
+    }
+
+    const usuario = await Usuario.findById(userId).select('+password');
+    if (!usuario) throw errorHttp('Usuario no encontrado', 404);
+
+    const passwordValida = await bcrypt.compare(passwordActual, usuario.password);
+    if (!passwordValida) {
+        // El endpoint original respondía { error } (sin success:false) → customError.
+        const err = errorHttp('La contraseña actual es incorrecta', 401);
+        err.customError = true;
+        throw err;
+    }
+
+    const salt = await bcrypt.genSalt(10);
+    usuario.password = await bcrypt.hash(passwordNueva, salt);
+    await usuario.save();
+
+    return usuario;
+};
+
+module.exports = { cambiarRol, moverAConjunto, cambiarPassword };

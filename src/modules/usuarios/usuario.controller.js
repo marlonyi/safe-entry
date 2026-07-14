@@ -1321,35 +1321,7 @@ exports.cambiarPassword = async (req, res) => {
         const userId = req.usuario.id;
         const { passwordActual, passwordNueva } = req.body;
 
-        // Validar que se enviaron ambos campos
-        if (!passwordActual || !passwordNueva) {
-            return errorResponse(res, "Debe proporcionar la contraseña actual y la nueva contraseña", 400);
-        }
-
-        // Validar longitud mínima de nueva contraseña
-        if (passwordNueva.length < 6) {
-            return errorResponse(res, "La nueva contraseña debe tener al menos 6 caracteres", 400);
-        }
-
-        // Buscar usuario en BD
-        const usuario = await Usuario.findById(userId).select('+password');
-        if (!usuario) {
-            return errorResponse(res, "Usuario no encontrado", 404);
-        }
-
-        // Verificar contraseña actual
-        const passwordValida = await bcrypt.compare(passwordActual, usuario.password);
-        if (!passwordValida) {
-            return res.status(401).json({ error: "La contraseña actual es incorrecta" });
-        }
-
-        // Hashear nueva contraseña
-        const salt = await bcrypt.genSalt(10);
-        const passwordHasheada = await bcrypt.hash(passwordNueva, salt);
-
-        // Actualizar contraseña
-        usuario.password = passwordHasheada;
-        await usuario.save();
+        const usuario = await usuarioService.cambiarPassword(userId, passwordActual, passwordNueva);
 
         // Registrar en auditoría
         try {
@@ -1368,6 +1340,8 @@ exports.cambiarPassword = async (req, res) => {
         res.json({ mensaje: "Contraseña actualizada correctamente" });
 
     } catch (error) {
+        if (error.customError) return res.status(error.status).json({ error: error.message });
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al cambiar contraseña:", error);
         errorResponse(res, "Error al cambiar contraseña", 500, getErrorDetails(error));
     }
