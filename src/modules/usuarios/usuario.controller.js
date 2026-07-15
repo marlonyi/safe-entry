@@ -1,31 +1,16 @@
 // ========================================
 // 📌 Imports desde nueva estructura modular
 // ========================================
-const { models, middlewares, logger } = require('../../index');
+const { models, logger } = require('../../index');
 const { Usuario, AuditLog } = models;
-const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
-const crypto = require("crypto");
 const { successResponse, errorResponse } = require('../../shared/utils/responseHandler');
-const { escaparRegex } = require('../../shared/utils/regexHelper');
 const mongoose = require('mongoose');
 const { getConjuntoId, getTenantFilter, isSuperAdmin } = require('../../shared/middlewares/auth.middleware');
 const { audit } = require('../../shared/middlewares/audit.middleware');
 const { recordFailedLogin, resetLoginAttempts } = require('../../shared/middlewares/rateLimit.middleware');
-const Conjunto = require('../conjuntos/conjunto.model');
 const Visitante = require('../visitantes/visitante.model');
-const Parqueadero = require('../parqueaderos/parqueadero.model');
 const usuarioService = require('./usuario.service');
-
-// Genera un string aleatorio CRIPTOGRÁFICAMENTE seguro (para passwords
-// temporales). Usa crypto.randomInt (sin sesgo de módulo), no Math.random().
-function generarStringAleatorioSeguro(chars, length) {
-    let resultado = '';
-    for (let i = 0; i < length; i++) {
-        resultado += chars.charAt(crypto.randomInt(chars.length));
-    }
-    return resultado;
-}
 
 // Verificar ambiente
 const isProduction = process.env.NODE_ENV === 'production';
@@ -61,110 +46,23 @@ const getErrorDetails = (error) => {
     return error.message;
 };
 
-// Crear un nuevo usuario
+// Crear un nuevo usuario — adaptador HTTP sobre usuarioService.crearUsuario.
 exports.crearUsuario = async (req, res) => {
     try {
-        let {
-            nombre, apellido, cedula, apartamento, torre,
-            fechaIngreso, fechaRetiro, estadoExpensa,
-            tieneVehiculo, placaVehiculo, password, rol
-        } = req.body;
-
-        // ========== VALIDACIÓN Y SANITIZACIÓN DE ENTRADA ==========
-        // Sanitizar strings para prevenir XSS
-        const sanitize = (str) => str ? String(str).trim().replace(/<[^>]*>/g, '') : '';
-        nombre = sanitize(nombre);
-        apellido = sanitize(apellido);
-        cedula = sanitize(cedula);
-        apartamento = sanitize(apartamento);
-        torre = sanitize(torre);
-        placaVehiculo = placaVehiculo ? sanitize(placaVehiculo).toUpperCase() : null;
-
-        // Validar campos requeridos
-        if (!nombre || nombre.length < 2) {
-            return errorResponse(res, "El nombre debe tener al menos 2 caracteres", 400);
-        }
-        if (!apellido || apellido.length < 2) {
-            return errorResponse(res, "El apellido debe tener al menos 2 caracteres", 400);
-        }
-        if (!cedula || !/^\d{6,12}$/.test(cedula.replace(/\D/g, ''))) {
-            return errorResponse(res, "La cédula debe tener entre 6 y 12 dígitos", 400);
-        }
-        if (!password || password.length < 4) {
-            return errorResponse(res, "La contraseña debe tener al menos 4 caracteres", 400);
-        }
-
-        // Validar formato de placa colombiana (opcional)
-        // Formatos válidos: ABC123, ABC-123, ABC12D (motos/eléctricos)
-        if (placaVehiculo && !/^[A-Z]{3}-?(\d{3}|\d{2}[A-Z])$/.test(placaVehiculo)) {
-            return errorResponse(res, "Formato de placa inválido. Use: ABC123, ABC-123 o ABC12D", 400);
-        }
-
-        // Log solo en desarrollo
-        if (!isProduction) {
-            logger.debug("Datos recibidos:", { nombre, apellido, cedula, rol, tieneVehiculo, placaVehiculo });
-        }
-
-        const estadosPermitidos = ['al dia', 'en mora'];
-        if (estadoExpensa && !estadosPermitidos.includes(estadoExpensa)) {
-            return errorResponse(res, `Estado de expensa no válido. Use: ${estadosPermitidos.join(' o ')}`, 400);
-        }
-
-        if (cedula === ADMIN_CEDULA) {
-            return errorResponse(res, "No puedes registrar un usuario con esta cédula", 400);
-        }
-
-        // 🏢 MULTI-TENANT: Determinar conjunto para el nuevo usuario
-
-        // Prioridad: 1) conjuntoId del body (SuperAdmin), 2) conjunto del creador
-        let conjuntoDelCreador = req.body.conjuntoId || getConjuntoId(req);
-
-        // Validar que haya un conjunto válido
+        // 🏢 MULTI-TENANT: Prioridad: 1) conjuntoId del body (SuperAdmin), 2) conjunto del creador
+        const conjuntoDelCreador = req.body.conjuntoId || getConjuntoId(req);
         if (!conjuntoDelCreador) {
-            // SuperAdmin DEBE proporcionar conjuntoId
             if (isSuperAdmin(req)) {
                 return errorResponse(res, "SuperAdmin debe especificar el conjuntoId al crear usuarios", 400);
             }
-            // Admin/Portero sin conjunto asignado
             return errorResponse(res, "No tienes un conjunto asignado. Contacta al SuperAdmin.", 400);
         }
 
-        // Buscar si ya existe un usuario con esa cédula EN EL MISMO CONJUNTO
-        const usuarioExistente = await Usuario.findOne({
-            cedula,
-            conjunto: conjuntoDelCreador
+        const nuevoUsuario = await usuarioService.crearUsuario(req.body, {
+            conjuntoId: conjuntoDelCreador,
+            adminCedula: ADMIN_CEDULA
         });
-        if (usuarioExistente) {
-            return errorResponse(res, "El usuario ya existe en este conjunto", 400);
-        }
-
-        tieneVehiculo = tieneVehiculo === "Si" || tieneVehiculo === true;
-
-        if (tieneVehiculo && !placaVehiculo) {
-            return errorResponse(res, "Debe ingresar la placa del vehículo", 400);
-        }
-
-        const passwordHash = await bcrypt.hash(password, 10);
-
-        // Para porteros, apartamento y torre pueden estar vacíos
-        // Para otros roles, usamos valores por defecto si no vienen
-        const nuevoUsuario = new Usuario({
-            conjunto: conjuntoDelCreador, // 🏢 Asignar al mismo conjunto del creador
-            nombre,
-            apellido,
-            cedula,
-            apartamento: apartamento || (rol === 'porteria' ? 'N/A' : ''),
-            torre: torre || (rol === 'porteria' ? 'N/A' : ''),
-            fechaIngreso,
-            fechaRetiro: fechaRetiro || null,
-            estadoExpensa: estadoExpensa || 'al dia',
-            tieneVehiculo,
-            placaVehiculo: tieneVehiculo ? placaVehiculo : null,
-            password: passwordHash,
-            rol: rol || 'residente'
-        });
-
-        await nuevoUsuario.save();
+        const { nombre, apellido, cedula, rol } = nuevoUsuario;
 
         // Registrar en auditoría - actor derivado del token (no del cliente)
         const usuarioEjecutor = req.usuarioLogueado || null;
@@ -218,6 +116,7 @@ exports.crearUsuario = async (req, res) => {
             }
         });
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al crear usuario:", error);
         res.status(500).json({
             error: "Error al crear el usuario",
@@ -226,151 +125,82 @@ exports.crearUsuario = async (req, res) => {
     }
 };
 
-// Login de usuario
+// Login de usuario — adaptador HTTP sobre usuarioService.login.
+// El controller conserva lo que ES de la capa HTTP: rate-limit, auditoría y
+// las formas exactas de respuesta (incluida la asimetría histórica: el atajo
+// superadmin responde con successResponse envuelto; el login normal, plano).
 exports.loginUsuario = async (req, res) => {
     try {
         const { cedula, password, conjuntoId } = req.body; // conjuntoId opcional para casos de múltiples matches
 
-        // Helper para generar tokens (ahora incluye conjuntoId)
         const generateTokens = (payload) => {
             const accessToken = jwt.sign(payload, JWT_SECRET, { expiresIn: "2h" });
             const refreshToken = jwt.sign({ ...payload, type: 'refresh' }, JWT_SECRET, { expiresIn: "7d" });
             return { accessToken, refreshToken };
         };
 
-        // ========== BUSCAR USUARIO(S) POR CÉDULA ==========
-        // Puede haber múltiples usuarios con la misma cédula en diferentes conjuntos
-        const usuarios = await Usuario.find({ cedula }).populate('conjunto', 'nombre estado');
+        const r = await usuarioService.login({ cedula, password, conjuntoId });
 
-        if (usuarios.length === 0) {
-            const result = recordFailedLogin(req);
-            await audit.loginFailed(req, cedula, 'Usuario no encontrado');
-            return res.status(400).json({
-                error: "Usuario no encontrado",
-                attemptsRemaining: result.attemptsRemaining
-            });
-        }
-
-        // ========== ATAJO: SI HAY UN SUPERADMIN Y LA CONTRASEÑA COINCIDE, ENTRAR DIRECTO ==========
-        // El superadmin no pertenece a un conjunto, así que no tiene sentido pedirle elegir uno.
-        // Solo si la password no coincide con la del superadmin, pasamos a la lógica multi-conjunto.
-        if (!conjuntoId) {
-            const superadminMatch = usuarios.find(u => u.rol === 'superadmin');
-            if (superadminMatch) {
-                const passwordOkSuper = await bcrypt.compare(password, superadminMatch.password);
-                if (passwordOkSuper) {
-                    // Saltar directo al flujo de login normal usando este usuario
-                    const { accessToken, refreshToken } = generateTokens({
-                        id: superadminMatch._id.toString(),
-                        rol: 'superadmin',
-                        conjuntoId: null
-                    });
-                    resetLoginAttempts(req);
-                    await audit.loginSuccess(req, { id: superadminMatch._id, nombre: superadminMatch.nombre, cedula: superadminMatch.cedula, rol: 'superadmin' });
-                    return successResponse(res, {
-                        token: accessToken,
-                        refreshToken,
-                        expiresIn: 7200,
-                        usuario: {
-                            id: superadminMatch._id,
-                            nombre: superadminMatch.nombre,
-                            apellido: superadminMatch.apellido,
-                            cedula: superadminMatch.cedula,
-                            rol: 'superadmin'
-                        }
-                    }, "Login exitoso");
-                }
-            }
-        }
-
-        // ========== MANEJO DE MÚLTIPLES CONJUNTOS ==========
-        // Si hay múltiples usuarios con la misma cédula en diferentes conjuntos
-        if (usuarios.length > 1 && !conjuntoId) {
-            // Filtramos el superadmin del picker (ya intentamos login directo arriba)
-            const conjuntosDisponibles = usuarios
-                .filter(u => u.rol !== 'superadmin')
-                .map(u => {
-                    if (u.conjunto && u.conjunto.estado === 'activo') {
-                         return { conjuntoId: u.conjunto._id.toString(), conjuntoNombre: u.conjunto.nombre };
-                    }
-                    return null;
-                })
-                .filter(c => c !== null);
-
-            if (conjuntosDisponibles.length === 0) {
-                return errorResponse(res, "No hay conjuntos activos para este usuario", 400);
-            }
-
-            // Si después de filtrar superadmin queda solo 1, login directo a ese
-            if (conjuntosDisponibles.length === 1) {
-                const unicoUsuario = usuarios.find(u =>
-                    u.rol !== 'superadmin' &&
-                    u.conjunto && u.conjunto._id.toString() === conjuntosDisponibles[0].conjuntoId
-                );
-                if (unicoUsuario) {
-                    // Continúa al flujo normal con este usuario seleccionado
-                    usuarios.length = 0;
-                    usuarios.push(unicoUsuario);
-                } else {
-                    return res.status(300).json({
-                        mensaje: "Seleccione el perfil al que desea ingresar",
-                        conjuntos: conjuntosDisponibles,
-                        requiereSeleccion: true
-                    });
-                }
-            } else {
-                return res.status(300).json({
-                    mensaje: "Seleccione el perfil al que desea ingresar",
-                    conjuntos: conjuntosDisponibles,
-                    requiereSeleccion: true
+        switch (r.resultado) {
+            case 'no_encontrado': {
+                const result = recordFailedLogin(req);
+                await audit.loginFailed(req, cedula, 'Usuario no encontrado');
+                return res.status(400).json({
+                    error: "Usuario no encontrado",
+                    attemptsRemaining: result.attemptsRemaining
                 });
             }
-        }
-
-        // Seleccionar el usuario correcto
-        let usuario;
-        if (conjuntoId) {
-            if (conjuntoId === 'superadmin') {
-                 usuario = usuarios.find(u => u.rol === 'superadmin');
-            } else {
-                 // Si se especificó conjunto, buscar ese específicamente
-                 usuario = usuarios.find(u => u.conjunto && u.conjunto._id.toString() === conjuntoId);
-            }
-            if (!usuario) {
+            case 'sin_conjuntos_activos':
+                return errorResponse(res, "No hay conjuntos activos para este usuario", 400);
+            case 'seleccion_requerida':
+                return res.status(300).json({
+                    mensaje: "Seleccione el perfil al que desea ingresar",
+                    conjuntos: r.conjuntos,
+                    requiereSeleccion: true
+                });
+            case 'no_en_conjunto':
                 return errorResponse(res, "Usuario no encontrado en ese conjunto o rol.", 400);
+            case 'password_incorrecta': {
+                const result = recordFailedLogin(req);
+                await audit.loginFailed(req, cedula, 'Contraseña incorrecta');
+                return res.status(400).json({
+                    error: "Contraseña incorrecta",
+                    attemptsRemaining: result.attemptsRemaining
+                });
             }
-        } else {
-            // Un solo usuario encontrado o es superadmin general único
-            usuario = usuarios[0];
-        }
-
-        // ========== VERIFICAR CONTRASEÑA ==========
-        const esValida = await bcrypt.compare(password, usuario.password);
-        if (!esValida) {
-            const result = recordFailedLogin(req);
-            await audit.loginFailed(req, cedula, 'Contraseña incorrecta');
-            return res.status(400).json({
-                error: "Contraseña incorrecta",
-                attemptsRemaining: result.attemptsRemaining
-            });
-        }
-
-        // ========== VERIFICAR ESTADO DEL CONJUNTO (si aplica) ==========
-        if (usuario.rol !== 'superadmin' && usuario.conjunto) {
-            if (usuario.conjunto.estado !== 'activo') {
+            case 'conjunto_inactivo':
                 return errorResponse(res, "El conjunto residencial está suspendido o inactivo. Contacte al administrador.", 403);
-            }
         }
 
-        // ========== LOGIN EXITOSO ==========
+        const { usuario } = r;
         resetLoginAttempts(req);
 
-        const payload = {
+        if (r.esSuperadminDirecto) {
+            const { accessToken, refreshToken } = generateTokens({
+                id: usuario._id.toString(),
+                rol: 'superadmin',
+                conjuntoId: null
+            });
+            await audit.loginSuccess(req, { id: usuario._id, nombre: usuario.nombre, cedula: usuario.cedula, rol: 'superadmin' });
+            return successResponse(res, {
+                token: accessToken,
+                refreshToken,
+                expiresIn: 7200,
+                usuario: {
+                    id: usuario._id,
+                    nombre: usuario.nombre,
+                    apellido: usuario.apellido,
+                    cedula: usuario.cedula,
+                    rol: 'superadmin'
+                }
+            }, "Login exitoso");
+        }
+
+        const { accessToken, refreshToken } = generateTokens({
             id: usuario.id,
             rol: usuario.rol || "residente",
             conjuntoId: usuario.conjunto ? usuario.conjunto._id : null // SuperAdmin tiene null
-        };
-        const { accessToken, refreshToken } = generateTokens(payload);
+        });
 
         await audit.loginSuccess(req, {
             cedula: usuario.cedula,
@@ -456,99 +286,16 @@ exports.refreshToken = async (req, res) => {
 // 🏢 IMPORTANTE: Aplica filtrado multi-tenant para aislar datos por conjunto
 exports.obtenerUsuarios = async (req, res) => {
     try {
-
-        // 🏢 Obtener filtro de tenant (conjunto)
-        // SuperAdmin ve todo, otros roles solo ven su conjunto
+        // 🏢 SuperAdmin ve todo, otros roles solo ven su conjunto
         const tenantFilter = getTenantFilter(req);
 
-        // Parámetros de paginación y búsqueda (opcionales)
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 0; // 0 = sin límite (comportamiento original)
         const search = req.query.search?.trim() || '';
-        // Escapar metacaracteres antes de interpolar en $regex (evita ReDoS)
-        const searchSeguro = escaparRegex(search);
         const rol = req.query.rol || 'todos';
 
-        // Construir query de búsqueda CON filtro de tenant
-        let query = { ...tenantFilter };
-        if (search) {
-            query.$or = [
-                { nombre: { $regex: searchSeguro, $options: 'i' } },
-                { apellido: { $regex: searchSeguro, $options: 'i' } },
-                { cedula: { $regex: searchSeguro, $options: 'i' } },
-                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
-            ];
-            // Si hay búsqueda Y filtro de tenant, necesitamos usar $and
-            if (tenantFilter.conjunto) {
-                query = {
-                    $and: [
-                        tenantFilter,
-                        {
-                            $or: [
-                                { nombre: { $regex: searchSeguro, $options: 'i' } },
-                                { apellido: { $regex: searchSeguro, $options: 'i' } },
-                                { cedula: { $regex: searchSeguro, $options: 'i' } },
-                                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
-                            ]
-                        }
-                    ]
-                };
-            }
-        }
-        if (rol !== 'todos') {
-            if (query.$and) {
-                query.$and.push({ rol });
-            } else {
-                query.rol = rol;
-            }
-        }
-
-        // Query para visitantes también con filtro de tenant
-        let visitantesFilter = { ...tenantFilter };
-        if (search) {
-            if (tenantFilter.conjunto) {
-                visitantesFilter = {
-                    $and: [
-                        tenantFilter,
-                        {
-                            $or: [
-                                { nombre: { $regex: searchSeguro, $options: 'i' } },
-                                { apellido: { $regex: searchSeguro, $options: 'i' } },
-                                { cedula: { $regex: searchSeguro, $options: 'i' } },
-                                { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
-                            ]
-                        }
-                    ]
-                };
-            } else {
-                visitantesFilter.$or = [
-                    { nombre: { $regex: searchSeguro, $options: 'i' } },
-                    { apellido: { $regex: searchSeguro, $options: 'i' } },
-                    { cedula: { $regex: searchSeguro, $options: 'i' } },
-                    { placaVehiculo: { $regex: searchSeguro, $options: 'i' } }
-                ];
-            }
-        }
-
-        // Usar Promise.all para queries paralelas y .lean() para mejor rendimiento.
-        // Se excluye fotoPerfil (base64 de hasta ~2.8MB por usuario) del listado:
-        // la foto se obtiene en la vista de perfil individual, no en la lista.
-        let usuariosQuery = Usuario.find(query, '-password -__v -fotoPerfil').populate('conjunto', 'nombre');
-        let visitantesQuery = Visitante.find(visitantesFilter, '-__v').populate('conjunto', 'nombre');
-
-        // Aplicar paginación si se especifica límite
-        if (limit > 0) {
-            const skip = (page - 1) * limit;
-            usuariosQuery = usuariosQuery.skip(skip).limit(limit);
-            visitantesQuery = visitantesQuery.skip(skip).limit(limit);
-        }
-
-        const [usuarios, visitantes, totalUsuarios, totalVisitantes] = await Promise.all([
-            usuariosQuery.lean(),
-            visitantesQuery.lean(),
-            Usuario.countDocuments(query),
-            Visitante.countDocuments(visitantesFilter)
-        ]);
+        const { usuarios, visitantes, totalUsuarios, totalVisitantes } =
+            await usuarioService.listarUsuariosYVisitantes(tenantFilter, { page, limit, search, rol });
 
         const residentes = usuarios.filter(u => u.rol === 'residente');
         const porteros = usuarios.filter(u => u.rol === 'porteria');
@@ -632,19 +379,7 @@ exports.actualizarUsuario = async (req, res) => {
         const esPropio = req.usuario?.id === id;
         const esAdminOSuperior = ['admin', 'superadmin'].includes(req.usuario?.rol);
 
-        const CAMPOS_BASICOS = ['nombre', 'apellido', 'apartamento', 'torre', 'tieneVehiculo', 'placaVehiculo', 'placa2Vehiculo'];
-        const CAMPOS_PRIVILEGIADOS = ['rol', 'cedula', 'estadoExpensa']; // solo admin/superadmin
-
-        const datos = {};
-        for (const campo of CAMPOS_BASICOS) {
-            if (req.body[campo] !== undefined) datos[campo] = req.body[campo];
-        }
-        if (esAdminOSuperior) {
-            for (const campo of CAMPOS_PRIVILEGIADOS) {
-                if (req.body[campo] !== undefined) datos[campo] = req.body[campo];
-            }
-        }
-        // Obtener estado anterior ANTES de actualizar
+        // Obtener estado anterior ANTES de actualizar (también valida existencia)
         const usuarioAnterior = await Usuario.findById(id).lean();
         if (!usuarioAnterior) {
             return errorResponse(res, "Usuario no encontrado", 404);
@@ -667,30 +402,11 @@ exports.actualizarUsuario = async (req, res) => {
         }
 
         // Actor de la auditoría: SIEMPRE derivado del token (no del cliente).
-        delete datos.ejecutadoPor; // descartar cualquier ejecutadoPor que mande el cliente
         const usuarioEjecutor = req.usuarioLogueado;
 
-        // Quitar undefined o vacíos para no sobreescribir
-        Object.keys(datos).forEach(key => {
-            if (datos[key] === undefined || datos[key] === "") {
-                delete datos[key];
-            }
-        });
-
-        const usuarioActualizado = await Usuario.findByIdAndUpdate(
-            id,
-            { $set: datos },
-            { new: true, runValidators: true }
-        );
-
-        // Registrar cambios en auditoría
-        // Detectar qué campos cambiaron
-        const cambios = {};
-        Object.keys(datos).forEach(key => {
-            if (usuarioAnterior[key] !== datos[key]) {
-                cambios[key] = { antes: usuarioAnterior[key], despues: datos[key] };
-            }
-        });
+        // Whitelist anti-escalada + update + diff en el servicio
+        const { actualizado: usuarioActualizado, cambios } =
+            await usuarioService.actualizarUsuario(id, req.body, { puedeCamposPrivilegiados: esAdminOSuperior });
 
         // Siempre intentar registrar, usando usuario ejecutor o datos de req.body
         const logUsuario = usuarioEjecutor ? {
@@ -746,6 +462,7 @@ exports.actualizarUsuario = async (req, res) => {
             usuario: usuarioActualizado
         });
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al actualizar usuario:", error);
         res.status(500).json({ message: "Error al actualizar el usuario.", detalles: getErrorDetails(error) });
     }
@@ -1024,54 +741,8 @@ exports.crearAdminRapido = async (req, res) => {
     try {
         const { conjuntoId, nombre, apellido, cedula, email } = req.body;
 
-        // Validar que conjuntoId es válido
-        if (!conjuntoId) {
-            return errorResponse(res, "El ID del conjunto es requerido", 400);
-        }
-
-        // Validar formato de ObjectId
-        if (!mongoose.Types.ObjectId.isValid(conjuntoId)) {
-            return errorResponse(res, "ID de conjunto inválido", 400);
-        }
-
-        // Validar que el conjunto existe
-        const conjunto = await Conjunto.findById(conjuntoId);
-        if (!conjunto) {
-            return errorResponse(res, "Conjunto no encontrado", 404);
-        }
-
-        // Validar campos requeridos
-        if (!nombre || !apellido || !cedula) {
-            return errorResponse(res, "Nombre, apellido y cédula son requeridos", 400);
-        }
-
-        // Verificar si ya existe un usuario con esa cédula en ese conjunto
-        const existente = await Usuario.findOne({ cedula, conjunto: conjuntoId });
-        if (existente) {
-            return errorResponse(res, "Ya existe un usuario con esa cédula en este conjunto", 400);
-        }
-
-        // Generar contraseña temporal (8 caracteres alfanuméricos)
-        const generarPassword = () => {
-            const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-            return generarStringAleatorioSeguro(chars, 8);
-        };
-
-        const passwordTemporal = generarPassword();
-        const hashedPassword = await bcrypt.hash(passwordTemporal, 10);
-
-        // Crear el admin
-        const nuevoAdmin = new Usuario({
-            nombre: nombre.trim(),
-            apellido: apellido.trim(),
-            cedula: cedula.trim(),
-            email: email?.trim() || null,
-            password: hashedPassword,
-            rol: 'admin',
-            conjunto: conjuntoId
-        });
-
-        await nuevoAdmin.save();
+        const { nuevoAdmin, conjunto, passwordTemporal } =
+            await usuarioService.crearAdminRapido({ conjuntoId, nombre, apellido, cedula, email });
 
         // Registrar en audit log
         try {
@@ -1111,6 +782,7 @@ exports.crearAdminRapido = async (req, res) => {
             }
         });
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al crear admin rápido:", error);
         errorResponse(res, "Error al crear administrador", 500, getErrorDetails(error));
     }
@@ -1124,19 +796,8 @@ exports.exportarDatosConjunto = async (req, res) => {
         const { id } = req.params;
         const { formato = 'json' } = req.query;
 
-
-        // Verificar que el conjunto existe
-        const conjunto = await Conjunto.findById(id);
-        if (!conjunto) {
-            return errorResponse(res, "Conjunto no encontrado", 404);
-        }
-
-        // Obtener todos los datos del conjunto
-        const [usuarios, visitantes, parqueaderos] = await Promise.all([
-            Usuario.find({ conjunto: id }).select('-password -__v').lean(),
-            Visitante.find({ conjunto: id }).select('-__v').lean(),
-            Parqueadero.find({ conjunto: id }).select('-__v').lean()
-        ]);
+        const { conjunto, usuarios, visitantes, parqueaderos } =
+            await usuarioService.exportarDatosConjunto(id);
 
         const datos = {
             conjunto: {
@@ -1181,6 +842,7 @@ exports.exportarDatosConjunto = async (req, res) => {
         // Formato JSON por defecto
         res.json(datos);
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al exportar datos:", error);
         errorResponse(res, "Error al exportar datos", 500, getErrorDetails(error));
     }
@@ -1356,36 +1018,7 @@ exports.restablecerPassword = async (req, res) => {
         const { id } = req.params;
         const { nuevaPassword } = req.body;
 
-        // Si no se proporciona contraseña, generar una temporal
-        let password = nuevaPassword;
-        if (!password) {
-            // Generar contraseña temporal de 8 caracteres (cripto-segura)
-            const chars = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
-            password = generarStringAleatorioSeguro(chars, 8);
-        }
-
-        // Validar longitud
-        if (password.length < 6) {
-            return errorResponse(res, "La contraseña debe tener al menos 6 caracteres", 400);
-        }
-
-        // Buscar usuario
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-            return errorResponse(res, "ID de usuario no válido", 400);
-        }
-
-        const usuario = await Usuario.findById(id);
-        if (!usuario) {
-            return errorResponse(res, "Usuario no encontrado", 404);
-        }
-
-        // Hashear nueva contraseña
-        const salt = await bcrypt.genSalt(10);
-        const passwordHasheada = await bcrypt.hash(password, salt);
-
-        // Actualizar
-        usuario.password = passwordHasheada;
-        await usuario.save();
+        const { usuario, passwordTemporal } = await usuarioService.restablecerPassword(id, nuevaPassword);
 
         // Registrar en auditoría
         try {
@@ -1415,10 +1048,11 @@ exports.restablecerPassword = async (req, res) => {
                 cedula: usuario.cedula
             },
             // Solo devolver la contraseña temporal si fue generada automáticamente
-            passwordTemporal: !nuevaPassword ? password : undefined
+            passwordTemporal
         });
 
     } catch (error) {
+        if (error.status) return errorResponse(res, error.message, error.status);
         console.error("Error al restablecer contraseña:", error);
         errorResponse(res, "Error al restablecer contraseña", 500, getErrorDetails(error));
     }
