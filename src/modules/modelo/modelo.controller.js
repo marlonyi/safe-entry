@@ -18,7 +18,7 @@
  */
 
 const mongoose = require('mongoose');
-const Parqueadero = require('../parqueaderos/parqueadero.model');
+const parqueaderoService = require('../parqueaderos/parqueadero.service');
 const HistorialAcceso = require('../../shared/models/historialAcceso');
 const Usuario = require('../usuarios/usuario.model');
 const Conjunto = require('../conjuntos/conjunto.model');
@@ -66,15 +66,13 @@ exports.obtenerParametros = async (req, res) => {
         }
 
         // === 1. Plazas actuales del conjunto ===
-        const [plazasCarroVisit, plazasMotoVisit, plazasCarroPriv, plazasMotoPriv] = await Promise.all([
-            Parqueadero.countDocuments({ conjunto: conjuntoObjId, categoria: 'VISITANTE', tipoVehiculo: 'CARRO' }),
-            Parqueadero.countDocuments({ conjunto: conjuntoObjId, categoria: 'VISITANTE', tipoVehiculo: 'MOTO' }),
-            Parqueadero.countDocuments({ conjunto: conjuntoObjId, categoria: 'PRIVADO', tipoVehiculo: 'CARRO' }),
-            Parqueadero.countDocuments({ conjunto: conjuntoObjId, categoria: 'PRIVADO', tipoVehiculo: 'MOTO' })
-        ]);
+        // Misma fuente de conteos que dashboard y chatbot (parqueadero.service)
+        const plazas = await parqueaderoService.contarPlazasPorCategoria({ conjunto: conjuntoObjId });
+        const plazasCarroPriv = plazas.privadoCarro.total;
+        const plazasMotoPriv = plazas.privadoMoto.total;
 
-        const x1Actual = plazasCarroVisit;
-        const x2Actual = plazasMotoVisit;
+        const x1Actual = plazas.visitanteCarro.total;
+        const x2Actual = plazas.visitanteMoto.total;
 
         // === 2. Área física disponible (m²) ===
         // Se calcula como el área que YA está asignada a la zona de visitantes.

@@ -5,7 +5,8 @@ const HistorialAcceso = require("../../shared/models/historialAcceso");
 const Visitante = require("../visitantes/visitante.model");
 const Usuario = require("../usuarios/usuario.model");
 const Parqueadero = require("../parqueaderos/parqueadero.model");
-const Conjunto = require("../../../models/conjunto");
+const parqueaderoService = require("../parqueaderos/parqueadero.service");
+const Conjunto = require("../conjuntos/conjunto.model");
 const { escaparRegex } = require("../../shared/utils/regexHelper");
 
 // ===== Definicion de herramientas (tool schemas) =====
@@ -387,28 +388,16 @@ class ChatbotService {
         const conjuntos = conjuntoId ? [await Conjunto.findById(conjuntoId).lean()].filter(Boolean) : await Conjunto.find().lean();
         const out = [];
         for (const c of conjuntos) {
-            const f = { conjunto: c._id };
-            const [pcT, pcL, pmT, pmL, vcT, vcL, vmT, vmL, total, libres, ocupados] = await Promise.all([
-                Parqueadero.countDocuments({ ...f, categoria: 'PRIVADO', tipoVehiculo: 'CARRO' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'PRIVADO', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'PRIVADO', tipoVehiculo: 'MOTO' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'PRIVADO', tipoVehiculo: 'MOTO', estado: 'DISPONIBLE' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'VISITANTE', tipoVehiculo: 'CARRO' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'VISITANTE', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'VISITANTE', tipoVehiculo: 'MOTO' }),
-                Parqueadero.countDocuments({ ...f, categoria: 'VISITANTE', tipoVehiculo: 'MOTO', estado: 'DISPONIBLE' }),
-                Parqueadero.countDocuments(f),
-                Parqueadero.countDocuments({ ...f, estado: 'DISPONIBLE' }),
-                Parqueadero.countDocuments({ ...f, estado: 'OCUPADO' })
-            ]);
+            // Fuente única de disponibilidad: parqueadero.service (una aggregation)
+            const m = await parqueaderoService.contarPlazasPorCategoria({ conjunto: c._id });
             out.push({
                 conjunto: c.nombre,
-                total, libres, ocupados,
-                ocupacionPct: total > 0 ? Math.round((ocupados / total) * 100) : 0,
-                privadoCarro: { total: pcT, libres: pcL },
-                privadoMoto: { total: pmT, libres: pmL },
-                visitanteCarro: { total: vcT, libres: vcL },
-                visitanteMoto: { total: vmT, libres: vmL }
+                total: m.total, libres: m.libres, ocupados: m.ocupados,
+                ocupacionPct: m.ocupacionPct,
+                privadoCarro: m.privadoCarro,
+                privadoMoto: m.privadoMoto,
+                visitanteCarro: m.visitanteCarro,
+                visitanteMoto: m.visitanteMoto
             });
         }
         return { conjuntos: out };
@@ -478,8 +467,7 @@ class ChatbotService {
             accResHoy, accVisHoy,
             resTotal, resVehiculo, resMora, adminsT, porterosT,
             visT, visPend, visIngr,
-            parqT, parqL, parqO,
-            pcT, pcL, pmT, pmL, vcT, vcL, vmT, vmL,
+            plazas,
             torres
         ] = await Promise.all([
             HistorialAcceso.countDocuments({ ...queryHoy, tipoAcceso: 'entrada' }),
@@ -498,21 +486,17 @@ class ChatbotService {
             Visitante.countDocuments(conjuntoFilter),
             Visitante.countDocuments({ ...conjuntoFilter, estado: 'pendiente' }),
             Visitante.countDocuments({ ...conjuntoFilter, estado: 'ingresado' }),
-            Parqueadero.countDocuments(conjuntoFilter),
-            Parqueadero.countDocuments({ ...conjuntoFilter, estado: 'DISPONIBLE' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, estado: 'OCUPADO' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'PRIVADO', tipoVehiculo: 'CARRO' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'PRIVADO', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'PRIVADO', tipoVehiculo: 'MOTO' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'PRIVADO', tipoVehiculo: 'MOTO', estado: 'DISPONIBLE' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'VISITANTE', tipoVehiculo: 'CARRO' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'VISITANTE', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'VISITANTE', tipoVehiculo: 'MOTO' }),
-            Parqueadero.countDocuments({ ...conjuntoFilter, categoria: 'VISITANTE', tipoVehiculo: 'MOTO', estado: 'DISPONIBLE' }),
+            // Matriz de plazas desde la fuente única (parqueadero.service)
+            parqueaderoService.contarPlazasPorCategoria(conjuntoFilter),
             Usuario.distinct('torre', { ...conjuntoFilter, rol: 'residente' })
         ]);
 
-        const ocupPct = parqT > 0 ? Math.round((parqO / parqT) * 100) : 0;
+        const { total: parqT, libres: parqL, ocupados: parqO, ocupacionPct: ocupPct } = plazas;
+        const { privadoCarro, privadoMoto, visitanteCarro, visitanteMoto } = plazas;
+        const [pcT, pcL] = [privadoCarro.total, privadoCarro.libres];
+        const [pmT, pmL] = [privadoMoto.total, privadoMoto.libres];
+        const [vcT, vcL] = [visitanteCarro.total, visitanteCarro.libres];
+        const [vmT, vmL] = [visitanteMoto.total, visitanteMoto.libres];
         const torresList = torres.filter(t => t && t !== 'N/A').sort();
 
         return `${label ? `### ${label} ###\n` : ''}USUARIOS:
