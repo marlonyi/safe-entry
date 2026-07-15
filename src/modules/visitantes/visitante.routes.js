@@ -4,12 +4,22 @@ const router = express.Router();
 // 📌 Imports desde nueva estructura modular
 // ========================================
 const { models, middlewares, logger } = require('../../index');
-const { Parqueadero, Visitante } = models;
+const { Visitante } = models;
 const { verificarToken, esPorteriaOAdmin, getTenantFilter } = middlewares.auth;
 const { verificarLimiteVisitantes } = middlewares.planLimits;
 const { validateCreateVisitante, validateMongoId } = middlewares.validation;
 const visitanteController = require('./visitante.controller');
+const accesoService = require('./acceso.service');
 const isProduction = process.env.NODE_ENV === 'production';
+
+// Aislamiento tenant para handlers que operan sobre un visitante por ID:
+// devuelve true si el solicitante puede actuar sobre ese visitante.
+const perteneceAlConjunto = (req, visitante) => {
+    if (!req.usuario || req.usuario.rol === 'superadmin') return true;
+    const cSolic = req.usuario.conjunto?.toString() || req.usuario.conjuntoId?.toString();
+    const cVis = visitante.conjunto?.toString();
+    return !(cSolic && cVis && cSolic !== cVis);
+};
 
 // =======================================================
 // 📌 Registrar visitante (con asignación automática de plaza)
@@ -62,6 +72,11 @@ router.post("/qr/generar/:visitanteId", verificarToken, esPorteriaOAdmin, async 
         const visitante = await Visitante.findById(visitanteId);
         if (!visitante) {
             return res.status(404).json({ error: "Visitante no encontrado" });
+        }
+
+        // 🏢 Un portero/admin solo genera QR de visitantes de su conjunto
+        if (!perteneceAlConjunto(req, visitante)) {
+            return res.status(403).json({ error: "No tienes permisos sobre este visitante" });
         }
 
         const token = visitante.generarQR(horasValidez);
@@ -134,46 +149,19 @@ router.get("/qr/verificar/:token", async (req, res) => {
 // =======================================================
 router.post("/qr/ingresar/:token", async (req, res) => {
     try {
-        const HistorialAcceso = require("../../shared/models/historialAcceso");
-        const { token } = req.params;
-
-        const visitante = await Visitante.buscarPorQR(token);
+        const visitante = await Visitante.buscarPorQR(req.params.token);
         if (!visitante) {
             return res.status(404).json({ valid: false, error: "QR inválido o expirado" });
         }
 
-        // Si ya está dentro, no registrar otra vez (idempotencia)
-        if (visitante.estado === 'ingresado') {
-            return res.json({
-                valid: true,
-                yaIngreso: true,
-                mensaje: `${visitante.nombre} ${visitante.apellido} ya se encuentra dentro`,
-                visitante: {
-                    id: visitante._id,
-                    nombre: visitante.nombre,
-                    apellido: visitante.apellido,
-                    placa: visitante.placaVehiculo,
-                    estado: visitante.estado
-                }
-            });
-        }
-
-        visitante.estado = 'ingresado';
-        await visitante.save();
-
-        await HistorialAcceso.create({
-            conjunto: visitante.conjunto,
-            placa: visitante.placaVehiculo || 'SIN-PLACA',
-            tipoAcceso: 'entrada',
-            tipoUsuario: 'visitante',
-            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-            metodo: 'qr_scan',
-            fechaHora: new Date()
-        });
+        const { yaIngreso } = await accesoService.registrarIngresoVisitante(visitante, { metodo: 'qr_scan' });
 
         return res.json({
             valid: true,
-            mensaje: `Ingreso registrado: ${visitante.nombre} ${visitante.apellido}`,
+            ...(yaIngreso && { yaIngreso: true }),
+            mensaje: yaIngreso
+                ? `${visitante.nombre} ${visitante.apellido} ya se encuentra dentro`
+                : `Ingreso registrado: ${visitante.nombre} ${visitante.apellido}`,
             visitante: {
                 id: visitante._id,
                 nombre: visitante.nombre,
@@ -194,36 +182,17 @@ router.post("/qr/ingresar/:token", async (req, res) => {
 // =======================================================
 router.post("/:visitanteId/registrar-ingreso", verificarToken, esPorteriaOAdmin, async (req, res) => {
     try {
-        const HistorialAcceso = require("../../shared/models/historialAcceso");
-        const { visitanteId } = req.params;
-        const visitante = await Visitante.findById(visitanteId);
+        const visitante = await Visitante.findById(req.params.visitanteId);
         if (!visitante) return res.status(404).json({ success: false, error: "Visitante no encontrado" });
 
-        // Verificar tenant
-        if (req.usuario && req.usuario.rol !== 'superadmin') {
-            const cSolic = req.usuario.conjunto?.toString() || req.usuario.conjuntoId?.toString();
-            const cVis = visitante.conjunto?.toString();
-            if (cSolic && cVis && cSolic !== cVis) {
-                return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
-            }
+        if (!perteneceAlConjunto(req, visitante)) {
+            return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
         }
 
-        if (visitante.estado === 'ingresado') {
+        const { yaIngreso } = await accesoService.registrarIngresoVisitante(visitante, { metodo: 'manual_porteria' });
+        if (yaIngreso) {
             return res.status(400).json({ success: false, error: "El visitante ya está dentro" });
         }
-
-        visitante.estado = 'ingresado';
-        await visitante.save();
-
-        await HistorialAcceso.create({
-            conjunto: visitante.conjunto,
-            placa: visitante.placaVehiculo || 'SIN-PLACA',
-            tipoAcceso: 'entrada',
-            tipoUsuario: 'visitante',
-            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-            metodo: 'manual_porteria',
-            fechaHora: new Date()
-        });
 
         res.json({ success: true, mensaje: `Ingreso registrado para ${visitante.nombre} ${visitante.apellido}` });
     } catch (error) {
@@ -237,50 +206,17 @@ router.post("/:visitanteId/registrar-ingreso", verificarToken, esPorteriaOAdmin,
 // =======================================================
 router.post("/:visitanteId/registrar-salida", verificarToken, esPorteriaOAdmin, async (req, res) => {
     try {
-        const HistorialAcceso = require("../../shared/models/historialAcceso");
-        const { visitanteId } = req.params;
-        const visitante = await Visitante.findById(visitanteId);
+        const visitante = await Visitante.findById(req.params.visitanteId);
         if (!visitante) return res.status(404).json({ success: false, error: "Visitante no encontrado" });
 
-        if (req.usuario && req.usuario.rol !== 'superadmin') {
-            const cSolic = req.usuario.conjunto?.toString() || req.usuario.conjuntoId?.toString();
-            const cVis = visitante.conjunto?.toString();
-            if (cSolic && cVis && cSolic !== cVis) {
-                return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
-            }
+        if (!perteneceAlConjunto(req, visitante)) {
+            return res.status(403).json({ success: false, error: "No tienes permisos sobre este visitante" });
         }
 
-        if (visitante.estado === 'salido') {
+        const { yaSalio } = await accesoService.registrarSalidaVisitante(visitante, { metodo: 'manual_porteria' });
+        if (yaSalio) {
             return res.status(400).json({ success: false, error: "El visitante ya salió" });
         }
-
-        visitante.estado = 'salido';
-        await visitante.save();
-
-        // 🅿️ Liberar la plaza de parqueadero que tenía asignada
-        if (visitante.parqueadero) {
-            const plaza = await Parqueadero.findById(visitante.parqueadero);
-            if (plaza) {
-                plaza.estado = 'DISPONIBLE';
-                plaza.visitante = null;
-                plaza.horaAsignacion = null;
-                plaza.horaEntrada = null;
-                plaza.placaVehiculo = null;
-                await plaza.save();
-            }
-            visitante.parqueadero = null;
-            await visitante.save();
-        }
-
-        await HistorialAcceso.create({
-            conjunto: visitante.conjunto,
-            placa: visitante.placaVehiculo || 'SIN-PLACA',
-            tipoAcceso: 'salida',
-            tipoUsuario: 'visitante',
-            nombreUsuario: `${visitante.nombre} ${visitante.apellido}`,
-            metodo: 'manual_porteria',
-            fechaHora: new Date()
-        });
 
         res.json({ success: true, mensaje: `Salida registrada para ${visitante.nombre} ${visitante.apellido}` });
     } catch (error) {
@@ -294,9 +230,7 @@ router.post("/:visitanteId/registrar-salida", verificarToken, esPorteriaOAdmin, 
 // =======================================================
 router.post("/qr/ingreso/:token", async (req, res) => {
     try {
-        const { token } = req.params;
-
-        const visitante = await Visitante.buscarPorQR(token);
+        const visitante = await Visitante.buscarPorQR(req.params.token);
         if (!visitante) {
             return res.status(404).json({
                 success: false,
@@ -304,8 +238,9 @@ router.post("/qr/ingreso/:token", async (req, res) => {
             });
         }
 
-        visitante.estado = 'ingresado';
-        await visitante.save();
+        // Ahora pasa por el servicio de acceso: gana idempotencia y registro
+        // en historial (antes esta variante no escribía historialaccesos).
+        await accesoService.registrarIngresoVisitante(visitante, { metodo: 'qr_scan' });
 
         res.json({
             success: true,
@@ -323,9 +258,7 @@ router.post("/qr/ingreso/:token", async (req, res) => {
 // =======================================================
 router.post("/qr/salida/:token", async (req, res) => {
     try {
-        const { token } = req.params;
-
-        const visitante = await Visitante.buscarPorQR(token);
+        const visitante = await Visitante.buscarPorQR(req.params.token);
         if (!visitante) {
             return res.status(404).json({
                 success: false,
@@ -333,29 +266,16 @@ router.post("/qr/salida/:token", async (req, res) => {
             });
         }
 
-        // Transición ATÓMICA: solo una request concurrente pasa de !salido→salido.
-        const visitanteActualizado = await Visitante.findOneAndUpdate(
-            { _id: visitante._id, estado: { $ne: 'salido' } },
-            { $set: { estado: 'salido', qrToken: null, qrExpiracion: null } },
-            { new: true }
-        );
+        const { visitante: actualizado, yaSalio } = await accesoService.registrarSalidaPorQR(visitante);
 
-        if (!visitanteActualizado) {
+        if (yaSalio) {
             // Otra request concurrente ya registró la salida → responder idempotente.
             return res.status(200).json({ success: true, mensaje: 'Salida ya estaba registrada' });
         }
 
-        // 🅿️ Liberar la plaza asociada (antes quedaba OCUPADA para siempre).
-        // Solo la request que ganó la transición llega aquí.
-        if (visitanteActualizado.parqueadero) {
-            await Parqueadero.findByIdAndUpdate(visitanteActualizado.parqueadero, {
-                $set: { estado: 'DISPONIBLE', visitante: null, placaVehiculo: null }
-            });
-        }
-
         res.json({
             success: true,
-            mensaje: `Salida registrada para ${visitanteActualizado.nombre} ${visitanteActualizado.apellido}`,
+            mensaje: `Salida registrada para ${actualizado.nombre} ${actualizado.apellido}`,
             hora: new Date().toISOString()
         });
     } catch (error) {

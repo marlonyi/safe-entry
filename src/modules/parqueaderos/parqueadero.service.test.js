@@ -165,3 +165,35 @@ describe('registrarAccesoVehicular', () => {
         ).rejects.toThrow(/no registrado/);
     });
 });
+
+describe('contarPlazasPorCategoria', () => {
+    test('matriz categoria×tipo×estado consistente con countDocuments', async () => {
+        const conjunto = await Conjunto.create({ nombre: 'Test', direccion: 'x', ciudad: 'x', estado: 'activo' });
+        const c = conjunto._id;
+        await Parqueadero.create([
+            { conjunto: c, numero: 'P1', categoria: 'PRIVADO', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' },
+            { conjunto: c, numero: 'P2', categoria: 'PRIVADO', tipoVehiculo: 'CARRO', estado: 'OCUPADO' },
+            { conjunto: c, numero: 'M1', categoria: 'PRIVADO', tipoVehiculo: 'MOTO', estado: 'DISPONIBLE' },
+            { conjunto: c, numero: 'V1', categoria: 'VISITANTE', tipoVehiculo: 'CARRO', estado: 'RESERVADO' },
+            { conjunto: c, numero: 'V2', categoria: 'VISITANTE', tipoVehiculo: 'CARRO', estado: 'DISPONIBLE' },
+            { conjunto: c, numero: 'VM1', categoria: 'VISITANTE', tipoVehiculo: 'MOTO', estado: 'OCUPADO' },
+        ]);
+
+        const m = await parqueaderoService.contarPlazasPorCategoria({ conjunto: c });
+
+        expect(m.total).toBe(6);
+        expect(m.libres).toBe(3);
+        expect(m.ocupados).toBe(2);
+        expect(m.ocupacionPct).toBe(33);
+        expect(m.privadoCarro).toEqual({ total: 2, libres: 1 });
+        expect(m.privadoMoto).toEqual({ total: 1, libres: 1 });
+        expect(m.visitanteCarro).toEqual({ total: 2, libres: 1 });
+        expect(m.visitanteMoto).toEqual({ total: 1, libres: 0 });
+    });
+
+    test('conjunto sin plazas devuelve todo en cero', async () => {
+        const m = await parqueaderoService.contarPlazasPorCategoria({ conjunto: new mongoose.Types.ObjectId() });
+        expect(m.total).toBe(0);
+        expect(m.ocupacionPct).toBe(0);
+    });
+});

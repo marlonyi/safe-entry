@@ -33,6 +33,11 @@ const historialAccesoSchema = new mongoose.Schema({
         type: String,
         default: null
     },
+    metodo: {
+        type: String,
+        enum: ["qr_scan", "manual_porteria", "LPR_CAMERA", null],
+        default: null
+    },
     fechaHora: {
         type: Date,
         default: Date.now
@@ -40,6 +45,31 @@ const historialAccesoSchema = new mongoose.Schema({
 }, {
     timestamps: true
 });
+
+// Fábrica única: TODOS los registros de acceso deben crearse por aquí para
+// mantener una sola forma de documento (antes había 6 sitios construyendo el
+// documento a mano con formas divergentes: plaza sin metodo / metodo sin plaza).
+historialAccesoSchema.statics.registrar = function ({
+    conjunto,
+    placa,
+    tipoAcceso,
+    tipoUsuario,
+    nombreUsuario,
+    plaza = null,
+    metodo = null,
+    fechaHora = new Date()
+}) {
+    return this.create({
+        conjunto,
+        placa: placa || 'SIN-PLACA',
+        tipoAcceso,
+        tipoUsuario,
+        nombreUsuario,
+        plaza,
+        metodo,
+        fechaHora
+    });
+};
 
 // ========== ÍNDICES PARA MULTI-TENANT ==========
 historialAccesoSchema.index({ conjunto: 1, fechaHora: -1 });

@@ -3,6 +3,7 @@
  */
 const Visitante = require('./visitante.model');
 const Parqueadero = require('../parqueaderos/parqueadero.model');
+const parqueaderoService = require('../parqueaderos/parqueadero.service');
 
 const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
     let { nombreVisitante, apellidoVisitante, cedulaVisitante, placaVisitante, residenteId, tipoVehiculo } = data;
@@ -65,11 +66,12 @@ const registrarVisitante = async (data, conjuntoId, tenantFilter) => {
     await nuevoVisitante.save();
 
     if (plaza) {
-        plaza.visitante = nuevoVisitante._id;
-        plaza.estado = "OCUPADO";
-        plaza.horaAsignacion = new Date();
-        plaza.placaVehiculo = placaNormalizada;
-        await plaza.save();
+        // La transición de estado la hace el dueño de la máquina de estados
+        // (parqueadero.service), no este módulo.
+        plaza = await parqueaderoService.ocuparPlazaVisitante(plaza._id, {
+            visitanteId: nuevoVisitante._id,
+            placa: placaNormalizada
+        });
     }
 
     return { visitante: nuevoVisitante, plaza };
@@ -93,12 +95,9 @@ const eliminarVisitante = async (id, tenantFilter) => {
 
     await Visitante.findByIdAndDelete(id);
 
-    const plaza = await Parqueadero.findOne({ _id: visitante.parqueadero, ...tenantFilter });
+    let plaza = await Parqueadero.findOne({ _id: visitante.parqueadero, ...tenantFilter });
     if (plaza) {
-        plaza.estado = "DISPONIBLE";
-        plaza.visitante = null;
-        plaza.horaAsignacion = null;
-        await plaza.save();
+        plaza = await parqueaderoService.liberarPlazaVisitante(plaza._id);
     }
 
     return { visitante, plaza };

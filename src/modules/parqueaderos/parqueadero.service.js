@@ -88,6 +88,54 @@ const obtenerEstadisticas = async (tenantFilter) => {
     return stats;
 };
 
+// Matriz de conteos categoria × tipoVehiculo × estado en UNA sola aggregation.
+// Fuente única de "disponibilidad" para dashboard, chatbot y modelo PL
+// (antes chatbot.service replicaba esta matriz con ~11 countDocuments).
+const contarPlazasPorCategoria = async (conjuntoFilter) => {
+    const rows = await Parqueadero.aggregate([
+        { $match: conjuntoFilter },
+        {
+            $group: {
+                _id: { categoria: "$categoria", tipoVehiculo: "$tipoVehiculo", estado: "$estado" },
+                n: { $sum: 1 }
+            }
+        }
+    ]);
+
+    const resultado = {
+        total: 0, libres: 0, ocupados: 0,
+        privadoCarro: { total: 0, libres: 0 },
+        privadoMoto: { total: 0, libres: 0 },
+        visitanteCarro: { total: 0, libres: 0 },
+        visitanteMoto: { total: 0, libres: 0 }
+    };
+
+    const claves = {
+        'PRIVADO-CARRO': 'privadoCarro',
+        'PRIVADO-MOTO': 'privadoMoto',
+        'VISITANTE-CARRO': 'visitanteCarro',
+        'VISITANTE-MOTO': 'visitanteMoto'
+    };
+
+    for (const { _id, n } of rows) {
+        resultado.total += n;
+        if (_id.estado === 'DISPONIBLE') resultado.libres += n;
+        if (_id.estado === 'OCUPADO') resultado.ocupados += n;
+
+        const clave = claves[`${_id.categoria}-${_id.tipoVehiculo}`];
+        if (clave) {
+            resultado[clave].total += n;
+            if (_id.estado === 'DISPONIBLE') resultado[clave].libres += n;
+        }
+    }
+
+    resultado.ocupacionPct = resultado.total > 0
+        ? Math.round((resultado.ocupados / resultado.total) * 100)
+        : 0;
+
+    return resultado;
+};
+
 // Asignar parqueadero a visitante (filtrando por tipo de vehículo)
 const asignarVisitante = async (visitanteId, tipoVehiculo = "CARRO", tenantFilter) => {
     // Claim ATÓMICO: la condición estado:"DISPONIBLE" va DENTRO del update, así
@@ -154,6 +202,48 @@ const asignarResidente = async (plazaId, residenteId, tenantFilter) => {
     return plaza.populate("residenteAsignado", "nombre apellido placaVehiculo");
 };
 
+// ========================================================================
+// 🅿️ Dueño ÚNICO de las transiciones de estado de plaza para visitantes.
+// Ningún otro módulo debe mutar plaza.estado directamente: visitantes y las
+// rutas QR llaman ocuparPlazaVisitante / liberarPlazaVisitante.
+// ========================================================================
+
+// Marca la plaza OCUPADA por un visitante (atómico, idempotente).
+const ocuparPlazaVisitante = async (plazaId, { visitanteId, placa = null }) => {
+    return Parqueadero.findByIdAndUpdate(
+        plazaId,
+        {
+            $set: {
+                estado: "OCUPADO",
+                visitante: visitanteId,
+                placaVehiculo: placa
+            }
+        },
+        { new: true }
+    );
+};
+
+// Libera la plaza de un visitante con reset COMPLETO y atómico.
+// (Antes había 3 caminos que liberaban con resets distintos: uno no anulaba
+// visitante/placaVehiculo, otro no anulaba horaEntrada.)
+// Nota: horaAsignacion NO existe en el schema — los caminos viejos la
+// escribían y Mongoose la descartaba en silencio; aquí no se perpetúa.
+const liberarPlazaVisitante = async (plazaId) => {
+    if (!plazaId) return null;
+    return Parqueadero.findByIdAndUpdate(
+        plazaId,
+        {
+            $set: {
+                estado: "DISPONIBLE",
+                visitante: null,
+                placaVehiculo: null,
+                horaEntrada: null
+            }
+        },
+        { new: true }
+    );
+};
+
 // Liberar plaza (para visitantes o residentes que se mudan)
 const liberarPlaza = async (idPlaza, tenantFilter) => {
     const plaza = await Parqueadero.findOne({ _id: idPlaza, ...tenantFilter });
@@ -193,16 +283,15 @@ const registrarEntrada = async ({ visitanteId, placa }, tenantFilter) => {
         if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
     }
 
-    const nuevoAcceso = new HistorialAcceso({
+    await HistorialAcceso.registrar({
         conjunto: tenantFilter.conjunto,
         placa: placa || (plaza && plaza.placaVehiculo) || 'DESCONOCIDA',
         tipoAcceso: 'entrada',
         tipoUsuario: 'visitante',
         nombreUsuario,
         plaza: plaza ? plaza.numero : null,
-        fechaHora: new Date()
+        metodo: 'LPR_CAMERA'
     });
-    await nuevoAcceso.save();
 
     return plaza || { numero: null };
 };
@@ -324,16 +413,14 @@ const registrarSalida = async (plazaId, tenantFilter) => {
         if (visitanteDoc) nombreUsuario = `${visitanteDoc.nombre} ${visitanteDoc.apellido}`;
     }
 
-    const nuevoAcceso = new HistorialAcceso({
+    await HistorialAcceso.registrar({
         conjunto: previa.conjunto,
         placa: previa.placaVehiculo || 'DESCONOCIDA',
         tipoAcceso: 'salida',
         tipoUsuario: 'visitante',
         nombreUsuario,
-        plaza: previa.numero,
-        fechaHora: new Date()
+        plaza: previa.numero
     });
-    await nuevoAcceso.save();
 
     // Devolver el estado ACTUAL (post-update) para consumidores/tests.
     return Parqueadero.findById(previa._id);
@@ -360,15 +447,13 @@ const registrarAccesoVehicular = async (placa, tipo, tenantFilter, conjuntoId, u
     const nombreUsuario = `${persona.nombre} ${persona.apellido}`;
     const tipoUsuario = residente ? 'residente' : 'visitante';
 
-    const acceso = new HistorialAcceso({
+    const acceso = await HistorialAcceso.registrar({
         conjunto: conjuntoId,
         placa,
         tipoAcceso: tipo,
         tipoUsuario,
-        nombreUsuario,
-        fechaHora: new Date()
+        nombreUsuario
     });
-    await acceso.save();
 
     return { acceso, persona: nombreUsuario, rol: tipoUsuario };
 };
@@ -908,9 +993,12 @@ const obtenerParqueaderosPorTorre = async (tenantFilter) => {
 module.exports = {
     obtenerPlazas,
     obtenerEstadisticas,
+    contarPlazasPorCategoria,
     asignarVisitante,
     asignarResidente,
     liberarPlaza,
+    ocuparPlazaVisitante,
+    liberarPlazaVisitante,
     registrarEntrada,
     buscarPlazaOcupadaPorVisitante,
     obtenerHistorial,
